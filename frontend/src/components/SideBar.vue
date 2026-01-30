@@ -5,11 +5,11 @@
         <div class="sidebar-top">
           <button class="new-btn" @click="$emit('new-chat')">
             <span class="plus">+</span>
-            <span>New</span>
+            <span>新建会话</span>
           </button>
 
           <div class="search">
-            <input v-model.trim="search" type="text" placeholder="Search conversations..." />
+            <input v-model.trim="search" type="text" placeholder="搜索历史会话..." />
             <svg class="search-ico" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
         </div>
@@ -17,8 +17,8 @@
         <div class="sidebar-scroll">
           <div class="group">
             <div class="group-hd">
-              <div class="group-title">Your conversations</div>
-              <button class="clear" v-if="filteredRecent.length" @click="$emit('clear-group', 'recent')">Clear All</button>
+              <div class="group-title">会话记录</div>
+              <button class="clear" v-if="filteredRecent.length" @click="$emit('clear-group', 'recent')">清空</button>
             </div>
 
             <div class="list">
@@ -59,7 +59,7 @@
 
           <div class="group" style="margin-top: 14px;">
             <div class="group-hd">
-              <div class="group-title">Last 7 Days</div>
+              <div class="group-title">一周前</div>
             </div>
 
             <div class="list">
@@ -92,7 +92,7 @@
           </button>
 
           <button class="logout" type="button" @click="$emit('logout')">
-            Logout
+            登出
           </button>
         </div>
       </div>
@@ -380,13 +380,13 @@ const filteredLast7 = computed(() => filterList(props.last7Days))
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.2px;
-  padding-right: 132px;
+  padding-right: 2px;
 }
 
 .title-edit {
   flex: 1;
   height: 34px;
-  max-width: calc(100% - 132px);
+  max-width: calc(100%);
   border-radius: 10px;
   border: 1px solid #e5e7eb;
   background: transparent;
@@ -411,7 +411,7 @@ const filteredLast7 = computed(() => filterList(props.last7Days))
 .actions {
   display: inline-flex;
   align-items: center;
-  gap: 0px;
+  gap: 0;
   position: absolute;
   right: 14px;
   top: 50%;
@@ -425,6 +425,16 @@ const filteredLast7 = computed(() => filterList(props.last7Days))
 .item:hover .actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.item:has(.title-edit) .actions {
+  display: none;
+  pointer-events: none;
+}
+
+
+.item:hover .txt {
+  padding-right: 54px;
 }
 
 .icon-btn {
