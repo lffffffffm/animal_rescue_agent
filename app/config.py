@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./data/vectors")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
 
+    # 数据库配置
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
+
     # Qdrant 配置
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", None)
@@ -38,7 +41,6 @@ class Settings(BaseSettings):
 
     # API配置
     API_V1_STR: str = "/api/v1"
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # 检索配置
     RETRIEVAL_TOP_K: int = 5
@@ -47,8 +49,14 @@ class Settings(BaseSettings):
     # Judge相关配置
     MAX_RETRY: int = 2  # 最大重试次数
     MIN_EVIDENCE_CONFIDENCE: float = 0.6
-    MIN_DOCS_REQUIRED: int = 6  # 至少需要的文档数量
-    MIN_RERANK_SCORE: float = 0.25  # rerank 相关性阈值（经验值）
+    MIN_DOCS_REQUIRED: int = 5  # 至少需要的文档数量
+    MIN_HIGH_CONF_DOCS: int = 6  # 满足高可信度文档数量
+    MIN_RERANK_SCORE: float = 0.6  # rerank 相关性阈值（经验值）
+
+    # 认证配置
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
     class Config:
         env_file = ".env"

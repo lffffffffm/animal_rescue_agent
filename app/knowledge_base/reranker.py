@@ -40,8 +40,6 @@ class Reranker:
             logger.error(f"Rerank 模型加载失败: {e}")
             raise
 
-    from langchain_core.documents import Document
-
     def rerank(
             self,
             query: str,
@@ -77,6 +75,22 @@ class Reranker:
         if not valid_docs:
             logger.warning("没有可用于 rerank 的有效文档")
             return []
+
+        # ✅ 去重逻辑：按 metadata['id'] 去重
+        unique_docs_dict = {}
+        for doc in valid_docs:
+            doc_id = doc.metadata.get("id")
+            if doc_id is not None:
+                if doc_id not in unique_docs_dict:
+                    unique_docs_dict[doc_id] = doc
+                else:
+                    logger.info(f"去掉重复文档: {doc_id}")
+            else:
+                # 没有 id 的文档直接保留
+                unique_docs_dict[id(doc)] = doc
+
+        valid_docs = list(unique_docs_dict.values())
+        logger.info(f"去重后剩余 {len(valid_docs)} 条文档")
 
         logger.info(f"开始 Rerank，共 {len(valid_docs)} 条候选文档")
 

@@ -12,18 +12,33 @@ def generate_response(state: AgentState) -> AgentState:
     """
 
     query = state.get("rewrite_query") or state.get("query")
-    merged = state.get("merged_docs", {})
+    merged = state.get("merged_docs", [])
     kb_docs = state.get("kb_docs", [])
     web_docs = state.get("web_facts", [])
+    enable_map = state.get("enable_map")
 
     logger.info(f"🧠 Generate：KB={len(kb_docs)}, Web={len(web_docs)}")
 
+    # ===== 生成 context，保留来源、类型、置信度和 url（若存在） =====
     context = "\n\n".join(
-        f"[{i+1}]\n{doc.get('content', '')}"
+        f"[{i + 1}] (type: {doc.get('type', 'unknown')}, "
+        f"source: {doc.get('source', '')}, "
+        f"confidence: {doc.get('confidence', '')}"
+        + (f", url: {doc.get('url', '')}" if doc.get('url') else "")
+        + f")\n{doc.get('content', '')}"
         for i, doc in enumerate(merged)
-    )  # todo
+    )
 
+    if enable_map:
+        for i, hospital in enumerate(state.get("map_result", []), 1):
+            context += (
+                f"\n{i}. {hospital['name']} "
+                f"({hospital.get('distance_m', '?')}m)\n"
+                f"   地址: {hospital.get('address', '未知')}\n"
+                f"   电话: {hospital.get('tel', '无')}"
+            )
 
+    logger.info(f"Context: {context}")
     prompt = GENERATE_PROMPT.format(
         context=context,
         question=query

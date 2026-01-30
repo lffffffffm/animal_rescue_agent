@@ -41,7 +41,7 @@ class AmapClient:
             "radius": radius,
             "sortrule": "distance",
             "offset": 10,
-            "extensions": "base",
+            "extensions": "all",
         }
         resp = requests.get(url, params=params)
         resp.raise_for_status()

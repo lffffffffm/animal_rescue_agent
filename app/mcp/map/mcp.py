@@ -1,5 +1,6 @@
 # app/mcp/map/mcp.py
 from typing import Dict, List
+import re
 from app.config import settings
 from app.mcp.base import BaseMCP
 from app.mcp.map.client import AmapClient
@@ -77,8 +78,18 @@ class MapMCP(BaseMCP):
         if not keywords:
             raise ValueError(f"不支持的资源类型: {resource_type}")
 
-        # 2️⃣ 地址 → 经纬度
-        location = self.client.geocode(address)
+        # 2️⃣ 地址 → 经纬度 (或直接使用经纬度)
+        location = ""
+        # 检查 address 是否为 "lat,lon" 格式
+        if re.match(r"^-?\d{1,2}\.\d+,-?\d{1,3}\.\d+$", address):
+            try:
+                lat, lon = address.split(',')
+                location = f"{lon},{lat}"  # 高德API需要 lon,lat 格式
+            except ValueError:
+                location = self.client.geocode(address) # 解析失败则回退
+        else:
+            location = self.client.geocode(address)
+
         if not location:
             # 地址无法解析，直接返回空结果（不中断 Agent）
             return MapSearchResult(
@@ -128,7 +139,6 @@ if __name__ == "__main__":
             radius_km=5,
             max_results=3
         )
-
         for i, item in enumerate(res["resources"], 1):
             print(f"{i}. {item['name']} ({item['distance_m']}m)")
             print(f"   地址: {item['address']}")

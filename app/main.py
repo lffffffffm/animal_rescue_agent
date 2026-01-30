@@ -1,12 +1,11 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-# from app.api import health, api_v1
+from app.api import health, v1
 from app.config import settings
 from loguru import logger
 
-
-logger.info("项目启动")
+from app.db import init_db
 
 
 @asynccontextmanager
@@ -14,17 +13,14 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时：创建数据库表
     logger.info("启动应用...")
-
-    # 加载知识库（可以异步进行）
-    logger.info("加载知识库...")
-
+    logger.info("初始化数据库...")
+    init_db()
     yield
 
     # 关闭时：清理资源
     logger.info("关闭应用，清理资源...")
 
 
-# 创建FastAPI应用
 app = FastAPI(
     title="流浪动物救助智能问答平台",
     description="基于FastAPI的流浪动物救助智能问答系统",
@@ -37,15 +33,15 @@ app = FastAPI(
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 注册路由
-# app.include_router(health.router, tags=["健康检查"])
-# app.include_router(api_v1.router, prefix="/api/v1")
+app.include_router(health.router, tags=["健康检查"])
+app.include_router(v1.api_router, prefix="", tags=["API接口"])
 
 
 @app.get("/")

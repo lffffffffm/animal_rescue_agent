@@ -18,6 +18,5 @@ def web_search_node(state: AgentState) -> AgentState:
 
     return {
         **state,
-        "web_facts": result["facts"],
-        "used_web_search": True,
+        "web_facts": result["facts"]
     }

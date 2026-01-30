@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from pydantic import BaseModel
 
 
@@ -8,6 +8,7 @@ class RescueResource(BaseModel):
     address: str
     location: str  # "lng,lat"
     distance_m: int
+    tel: Union[str, List[str], None]
     source: str = "Amap"
 
 

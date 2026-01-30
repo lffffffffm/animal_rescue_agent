@@ -30,7 +30,6 @@ def rejudge(state: AgentState) -> str:
     for doc in merged_docs:
         confidence = doc.get("confidence")
 
-        # KB 文档通常没有 confidence，视为可信
         if confidence is None:
             high_conf_docs.append(doc)
         elif confidence >= settings.MIN_EVIDENCE_CONFIDENCE:
@@ -43,8 +42,8 @@ def rejudge(state: AgentState) -> str:
     )
 
     # ③ 至少有一条高可信证据 → 正常生成
-    if high_conf_docs:
-        return "generate" # return "rescue_action_judge"
+    if len(high_conf_docs) >= settings.MIN_HIGH_CONF_DOCS:
+        return "rescue_action_judge"
 
     # ④ 只有低可信 web 证据 → 降级生成
     return "low_confidence_generate"
