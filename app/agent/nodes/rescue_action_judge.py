@@ -13,10 +13,21 @@ def rescue_action_judge(state: AgentState) -> AgentState:
     query = state.get("query", "")
     answer = state.get("response", "")
     enable_map = state.get("enable_map", False)
+    address = state.get("location")
 
-    # 不允许调用地图
+    # 不允许调用地图：明确置空 map_result，避免下游误用
     if not enable_map:
-        return state
+        return {
+            **state,
+            "map_result": None
+        }
+
+    # 允许地图但缺少地址：同样不调用
+    if not address:
+        return {
+            **state,
+            "map_result": None
+        }
 
     prompt = RESCUE_ACTION_JUDGE_PROMPT.format(
         query=query,

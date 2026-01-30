@@ -10,7 +10,7 @@ import {
   me as apiMe,
   listSessions,
   getSessionHistory,
-  rescueQuery,
+  rescueQueryStream,
   updateSessionTitle,
   deleteSession
 } from './services/api'
@@ -180,34 +180,55 @@ async function send(text) {
   const userMsg = { id: `u:${Date.now()}`, role: 'user', content: text }
   t.messages.push(userMsg)
 
-  const chat_history = t.messages
+  let chat_history = t.messages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-10)
-    .map(m => ({ role: m.role, content: m.content }))
+    .map(m => `${m.role}: ${m.content}`)
+
+  if (!Array.isArray(chat_history)) {
+    console.error('chat_history 不是数组:', chat_history)
+    chat_history = []
+  }
 
   loading.value = true
+
+  const assistantId = `a:${Date.now()}`
+  const assistantMsg = { id: assistantId, role: 'assistant', content: '' }
+  t.messages.push(assistantMsg)
+
   try {
-    const resp = await rescueQuery({
+    const lastSid = t.sessionIds[t.sessionIds.length - 1]
+    const session_id = typeof lastSid === 'string' ? lastSid : null
+
+    await rescueQueryStream({
       query: text,
+      session_id,
       chat_history,
       enable_web_search: enableWeb.value,
-      enable_map: enableMap.value
+      enable_map: enableMap.value,
+      onDelta: (payload) => {
+        const delta = payload?.text ?? ''
+        assistantMsg.content += delta
+      },
+      onDone: (meta) => {
+        if (meta?.session_id && !t.sessionIds.includes(meta.session_id)) {
+          t.sessionIds.push(meta.session_id)
+
+          // 新会话：把 thread.id 切换为后端 session_id，避免后续用 Date.now() 这种本地 id 造成“会话未找到”
+          if (!session_id) {
+            const oldId = t.id
+            t.id = meta.session_id
+            if (activeId.value === oldId) activeId.value = meta.session_id
+          }
+        }
+
+        if (t.title === 'New chat') t.title = text
+      }
     })
-
-    const answer = resp?.answer ?? ''
-    t.messages.push({ id: `a:${Date.now()}`, role: 'assistant', content: answer })
-
-    if (t.title === 'New chat') t.title = text
-
-    const sessions = await listSessions().catch(() => [])
-    const newest = (sessions || [])
-      .slice()
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-
-    if (newest?.session_id && !t.sessionIds.includes(newest.session_id)) {
-      t.sessionIds.push(newest.session_id)
-    }
   } catch (e) {
+    // 如果流式失败，把占位的 assistant 消息替换为错误提示
+    assistantMsg.content = ''
+    t.messages = t.messages.filter(m => m.id !== assistantId)
     error.value = e?.message || '发送失败'
   } finally {
     loading.value = false

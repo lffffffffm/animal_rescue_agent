@@ -82,14 +82,9 @@ export async function createSession(title) {
 }
 
 export async function updateSessionTitle(sessionId, title) {
-  const body = new URLSearchParams()
-  body.set('title', title)
-  return request(`/session/${encodeURIComponent(sessionId)}/title`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body
+  const qs = `?title=${encodeURIComponent(title)}`
+  return request(`/session/${encodeURIComponent(sessionId)}/title${qs}`, {
+    method: 'PUT'
   })
 }
 
@@ -97,7 +92,7 @@ export async function deleteSession(sessionId) {
   return request(`/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
 }
 
-export async function rescueQuery({ query, chat_history = [], enable_web_search = false, enable_map = false, location = null, radius_km = null }) {
+export async function rescueQuery({ query, chat_history = [], enable_web_search = false, enable_map = false, location = null, radius_km = 5 }) {
   return request('/query', {
     method: 'POST',
     headers: {
@@ -114,3 +109,97 @@ export async function rescueQuery({ query, chat_history = [], enable_web_search 
   })
 }
 
+// SSE 流式请求方法
+// 后端事件格式：
+// event: delta
+// data: {"text":"..."}
+//
+// event: done
+// data: { session_id, used_web_search, used_map, evidences, rescue_resources, ... }
+export async function rescueQueryStream({
+  query,
+  session_id = null,
+  chat_history = [],
+  enable_web_search = false,
+  enable_map = false,
+  location = null,
+  radius_km = 5,
+  onDelta,
+  onDone
+} = {}) {
+  const url = `${API_BASE_URL}/query/stream`
+
+  const token = tokenStore.get()
+  const body = {
+    query,
+    chat_history,
+    enable_web_search,
+    enable_map,
+    location,
+    radius_km,
+    ...(session_id ? { session_id } : {})
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(body)
+  })
+
+  if (!res.ok) {
+    const isJson = (res.headers.get('content-type') || '').includes('application/json')
+    const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => '')
+    const msg = typeof data === 'object' && data?.detail ? data.detail : `请求失败: ${res.status}`
+    const err = new Error(msg)
+    err.status = res.status
+    err.data = data
+    throw err
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('浏览器不支持流式响应')
+
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  const flush = () => {
+    let idx
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const raw = buffer.slice(0, idx)
+      buffer = buffer.slice(idx + 2)
+
+      const lines = raw.split('\n')
+      let event = ''
+      let dataLine = ''
+
+      for (const l of lines) {
+        if (l.startsWith('event:')) event = l.slice('event:'.length).trim()
+        if (l.startsWith('data:')) dataLine += l.slice('data:'.length).trim()
+      }
+
+      if (!event || !dataLine) continue
+
+      let payload
+      try {
+        payload = JSON.parse(dataLine)
+      } catch {
+        continue
+      }
+
+      if (event === 'delta') onDelta?.(payload)
+      if (event === 'done') onDone?.(payload)
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    flush()
+  }
+
+  flush()
+}

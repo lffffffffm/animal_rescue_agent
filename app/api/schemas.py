@@ -64,7 +64,7 @@ class AnimalRescueQueryRequest(BaseModel):
     # 历史对话（给 Agent 用）
     # 约定为字符串列表：['user: ...', 'assistant: ...', ...]
     chat_history: Optional[List[str]] = Field(
-        default=None,
+        default_factory=list,
         description="历史对话"
     )
     # Agent 行为控制

@@ -201,6 +201,10 @@ watch(
   color: #94a3b8;
   font-size: 14px;
   font-weight: 700;
+  max-width: 500px; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis;
 }
 
 .brand {

@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import json
 from typing import Generator, Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from sqlalchemy.orm import Session
-
 from app.agent.graph import app as agent_app
 from app.api.schemas import AnimalRescueQueryRequest
 from app.db.base import get_db

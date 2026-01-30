@@ -55,7 +55,7 @@ class MapMCP(BaseMCP):
 
     def invoke(
         self,
-        address: str,
+        address: str | None,
         resource_type: str = "hospital",
         radius_km: int = 5,
         max_results: int = 5,
@@ -72,6 +72,15 @@ class MapMCP(BaseMCP):
         Returns:
             MapSearchResult（dict）
         """
+
+        # 0️⃣ 参数兜底：address 为空时直接返回空结果（不中断 Agent）
+        address = (address or "").strip()
+        if not address:
+            return MapSearchResult(
+                query_address="",
+                resource_type=resource_type,
+                resources=[]
+            ).model_dump()
 
         # 1️⃣ 校验资源类型
         keywords = self._get_keywords(resource_type)
