@@ -63,7 +63,8 @@ class AnimalRescueQueryRequest(BaseModel):
 
     # 历史对话（给 Agent 用）
     # 约定为字符串列表：['user: ...', 'assistant: ...', ...]
-    chat_history: Optional[List[str]] = Field(
+    # 历史对话，支持多种格式：['user: ...', 'assistant: ...'] 或 [{"role":"user","content":"..."}, ...]
+    chat_history: Optional[List] = Field(
         default_factory=list,
         description="历史对话"
     )
@@ -83,6 +84,13 @@ class AnimalRescueQueryRequest(BaseModel):
     radius_km: int = Field(
         default=5,
         description="地图搜索半径（公里）"
+    )
+
+    # 图片输入（先上传拿 image_id，再在 query 时引用）
+    # 最多支持 4 张
+    image_ids: Optional[List[str]] = Field(
+        default_factory=list,
+        description="图片ID列表（最多4张）"
     )
 
 

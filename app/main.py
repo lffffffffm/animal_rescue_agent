@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
+from starlette.staticfiles import StaticFiles
 from app.api import health, v1
 from app.config import settings
 from loguru import logger
-
 from app.db import init_db
 
 
@@ -29,6 +30,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+# 挂载静态文件：如果目录不存在则自动创建，避免启动报错
+_base_dir = os.path.dirname(os.path.abspath(__file__))  # .../app
+uploads_dir = os.path.join(_base_dir, "data", "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+app.mount("/static/uploads", StaticFiles(directory=uploads_dir), name="static_uploads")
 
 # 配置CORS
 app.add_middleware(

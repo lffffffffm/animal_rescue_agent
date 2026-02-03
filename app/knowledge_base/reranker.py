@@ -14,7 +14,7 @@ class Reranker:
 
     def __init__(
             self,
-            model_name: str = "BAAI/bge-reranker-base",
+            model_name: str = "C:/models/bge-reranker-base",
             top_n: int = 5
     ):
         """
@@ -33,7 +33,7 @@ class Reranker:
         try:
             self._model = CrossEncoder(
                 self.model_name,
-                device="cpu"  # 你是 CPU，显式指定更稳
+                device="cpu"
             )
             logger.info(f"Rerank 模型加载成功: {self.model_name}")
         except Exception as e:
@@ -124,7 +124,7 @@ class Reranker:
 
 
 def get_reranker(
-        model_name: str = "BAAI/bge-reranker-base",
+        model_name: str = "C:/models/bge-reranker-base",
         top_n: int = 5
 ) -> Reranker:
     """

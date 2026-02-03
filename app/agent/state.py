@@ -4,23 +4,42 @@ from langchain.schema import Document
 
 
 class AgentState(TypedDict, total=False):
-    """
-    LangGraph 中使用的全局状态（State）
-
-    total=False 表示：
-    - 每个字段都不是必须一次性提供
-    - 由不同节点逐步补充
-    """
-    query: str
+    # ===== 输入字段 =====
+    query: Optional[str]
     chat_history: Optional[list[tuple[str, str]]]
-    rewrite_query: Optional[str]
-    kb_docs: List[Document]  # 本地知识库检索出的相关文档
-    web_facts: List[dict]  # Web 搜索结果
-    retry_count: int  # 重试次数, 用于后续循环次数的控制
+    image_ids: Optional[list[str]]          # A1：图片URL列表
     enable_web_search: bool
-    merged_docs: List[dict]
-    enable_map: bool  # 是否需要线下maps
-    map_result: Optional[dict]  # 救助资源搜索结果
+    enable_map: bool
+    location: Optional[str]
+    radius_km: Optional[int]
+
+    # ===== normalize/rewrite =====
+    normalized_query: str
+    rewrite_query: Optional[str]
+
+    # ===== vision =====
+    vision_facts: Optional[dict]
+    urgency_level: Optional[str]            # LOW/MEDIUM/HIGH/CRITICAL
+    red_flags: Optional[list[str]]          # e.g. heavy_bleeding/respiratory_distress
+
+    # ===== intent/gate =====
+    user_intent: str                        # real_help/learn_only/unclear
+    gate: Optional[dict]                    # {mode, tools, map_params, reasons}
+
+    # ===== evidence collection =====
+    force_top_k: Optional[int]              # 用于控制 retrieve 的 top_k
+    retry_count: int                        # KB 重试/扩大召回轮数（你现在会写回）
+    kb_docs: List[Document]
+    web_facts: List[dict]
+    map_result: Optional[object]            # 兼容 list[dict] 或 dict（看 MapMCP 返回）
+
+    # ===== sufficiency =====
+    sufficiency: Optional[dict]             # {level, strong_warning, followup_questions, ...}
+
+    # ===== old flow / optional =====
+    merged_docs: List[dict]                 # 旧流程字段（如不用可删）
+    evidences: Optional[list[dict]]         # 未来 evidence_pack_node 可用
+
+    # ===== output =====
     response: Optional[str]
-    location: Optional[str]  # 当前用户所在地
-    radius_km: Optional[int]  # 在地图搜索的半径
+    decision_trace: list[dict]

@@ -10,7 +10,7 @@ class ChatModel(BaseChatModel):
             self,
             model_name: str = "qwen-plus-latest",
             temperature: float = 0.3,
-            max_tokens: int = 20,  # 512
+            max_tokens: int = 512,
     ):
         self.llm = ChatOpenAI(
             model=model_name,

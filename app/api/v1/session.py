@@ -19,7 +19,7 @@ def create_session(
     创建新会话
     """
     try:
-        session = SessionService.create_session(db, current_user.username, title)
+        session = SessionService.create_session(db, current_user.id, title)
         return {"session_id": session.session_id, "title": session.title, "created_at": session.created_at}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
@@ -39,7 +39,7 @@ def get_session(
         raise HTTPException(status_code=404, detail="会话未找到")
     
     # 检查会话是否属于当前用户
-    if session.user_id != current_user.username:
+    if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此会话")
     
     return {
@@ -62,7 +62,7 @@ def get_sessions(
     """
     获取当前用户的所有会话
     """
-    sessions = SessionService.get_sessions_by_user(db, current_user.username, skip, limit)
+    sessions = SessionService.get_sessions_by_user(db, current_user.id, skip, limit)
     return [
         {
             "id": session.id,
@@ -90,7 +90,7 @@ def update_session_title(
     if not session:
         raise HTTPException(status_code=404, detail="会话未找到")
     
-    if session.user_id != current_user.username:
+    if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权修改此会话")
     
     updated_session = SessionService.update_session_title(db, session_id, title)
@@ -114,7 +114,7 @@ def delete_session(
     if not session:
         raise HTTPException(status_code=404, detail="会话未找到")
     
-    if session.user_id != current_user.username:
+    if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权删除此会话")
     
     success = SessionService.delete_session(db, session_id)
@@ -137,7 +137,7 @@ def get_conversation_history(
     if not session:
         raise HTTPException(status_code=404, detail="会话未找到")
     
-    if session.user_id != current_user.username:
+    if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权访问此会话")
     
     conversations = SessionService.get_conversation_history(db, session_id)
@@ -146,7 +146,9 @@ def get_conversation_history(
             "id": conv.id,
             "session_id": conv.session_id,
             "user_input": conv.user_input,
+            "user_images": conv.user_images,
             "agent_response": conv.agent_response,
+            "agent_meta": conv.agent_meta,
             "created_at": conv.created_at,
             "updated_at": conv.updated_at
         }

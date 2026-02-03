@@ -33,7 +33,7 @@
                 <template v-if="editingId === c.id">
                   <input
                     class="title-edit"
-                    :value="c.title"
+                    :value="c.draftTitle ?? c.title"
                     autofocus
                     @click.stop
                     @input="$emit('edit-input', { id: c.id, title: $event.target.value })"

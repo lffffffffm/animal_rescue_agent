@@ -21,13 +21,15 @@ class Settings(BaseSettings):
     # 向量数据库配置
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./data/vectors")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
+    EMBEDDING_OFFLINE: bool = os.getenv("EMBEDDING_OFFLINE", "true").lower() == "true"
+    EMBEDDING_MODEL_PATH: str = os.getenv("EMBEDDING_MODEL_PATH", "")
 
     # 数据库配置
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     # Qdrant 配置
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
-    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", None)
+    QDRANT_API_KEY: str | None = os.getenv("QDRANT_API_KEY", None)
     QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "animal_rescue_collection")
 
     # 地图相关配置
@@ -57,6 +59,14 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10000"))
+
+    # Vision
+    VISION_BASE_URL: str = os.getenv("VISION_BASE_URL", "")
+    VISION_API_KEY: str = os.getenv("VISION_API_KEY", "")
+    VISION_MODEL: str = os.getenv("VISION_MODEL", "")
+    VISION_TIMEOUT_SEC: int = int(os.getenv("VISION_TIMEOUT_SEC", "30"))
+
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "")
 
     class Config:
         env_file = ".env"

@@ -35,8 +35,8 @@ class QdrantHybridStore:
         else:
             self.client = QdrantClient(location=":memory:")
 
-        # 配置embedding模型
-        self.embedding_manager = initialize_embedding_model("BAAI/bge-base-zh")
+        # 配置embedding模型（离线优先，由 embedding_manager 内部读取 settings 配置）
+        self.embedding_manager = initialize_embedding_model()
 
         # 初始化collection
         self._init_collection()
@@ -101,7 +101,11 @@ class QdrantHybridStore:
 
 def get_vector_store(collection_name="animal_rescue_collection"):
     if collection_name not in _vector_store_cache:
+        # bge-small-zh-v1.5 的维度是 512
+        # recreate=True 会删除并重建 collection，解决维度不匹配问题
         _vector_store_cache[collection_name] = QdrantHybridStore(
-            collection_name=collection_name
+            collection_name=collection_name,
+            vector_size=512,  # 明确指定新维度
+            recreate=False     # 强制重建
         )
     return _vector_store_cache[collection_name]

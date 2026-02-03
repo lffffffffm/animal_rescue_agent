@@ -34,7 +34,7 @@ class HybridRetriever:
 
 _retriever_cache: dict[int, HybridRetriever] = {}
 
-
+# 未来可以扩展不同name的collection
 def get_retriever(top_k: int | None = None) -> HybridRetriever:
     """
     根据 top_k 获取（或复用）HybridRetriever

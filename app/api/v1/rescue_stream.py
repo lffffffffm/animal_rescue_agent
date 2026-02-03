@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.agent.graph import app as agent_app
 from app.api.schemas import AnimalRescueQueryRequest
 from app.db.base import get_db
-from app.db.model import User
+from app.db.model import User, UploadedImage
 from app.services.session_service import SessionService
 from app.utils.auth import get_current_active_user
 from app.utils.fallback import emergency_rescue_template
@@ -25,13 +25,13 @@ def _validate_or_create_session(db: Session, current_user: User, req: AnimalResc
         session = SessionService.get_session_by_id(db, req.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="会话未找到")
-        if session.user_id != current_user.username:
+        if session.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="无权访问此会话")
         return session
 
     return SessionService.create_session(
         db=db,
-        user_id=current_user.username,
+        user_id=current_user.id,
         title=req.query[:20]
     )
 
@@ -48,6 +48,34 @@ def rescue_query_stream(
         final_meta: Optional[dict] = None
 
         try:
+            raw_image_ids = list(req.image_ids or [])
+            if len(raw_image_ids) > 4:
+                raise HTTPException(status_code=400, detail="最多支持4张图片")
+
+            images_meta = []
+            if raw_image_ids:
+                imgs = db.query(UploadedImage).filter(
+                    UploadedImage.image_id.in_(raw_image_ids),
+                    UploadedImage.user_id == current_user.id,
+                    UploadedImage.session_id == session.session_id,
+                ).all()
+                found = {i.image_id: i for i in imgs}
+                missing = [i for i in raw_image_ids if i not in found]
+                if missing:
+                    raise HTTPException(status_code=404, detail=f"图片不存在或无权限: {missing}")
+
+                images_meta = [
+                    {
+                        "image_id": found[i].image_id,
+                        "url": found[i].url_path,
+                        "filename": found[i].original_filename,
+                        "content_type": found[i].content_type,
+                        "size_bytes": found[i].size_bytes,
+                        "uploaded_at": found[i].created_at.isoformat(),
+                    }
+                    for i in raw_image_ids
+                ]
+
             result = agent_app.invoke({
                 "query": req.query,
                 "chat_history": req.chat_history or [],
@@ -55,6 +83,8 @@ def rescue_query_stream(
                 "enable_map": req.enable_map,
                 "location": req.location,
                 "radius_km": req.radius_km,
+                "image_ids": [img["url"] for img in images_meta] if images_meta else [],
+                "images": images_meta,
             })
 
             answer = result.get("response", "") or ""
@@ -63,6 +93,7 @@ def rescue_query_stream(
                 "used_map": result.get("used_map", False),
                 "evidences": result.get("merged_docs", []),
                 "rescue_resources": result.get("rescue_resources", []) if result.get("map_result") else None,
+                "images": images_meta,
             }
 
         except Exception as e:
@@ -73,6 +104,7 @@ def rescue_query_stream(
                 "used_map": False,
                 "evidences": [],
                 "rescue_resources": None,
+                "images": images_meta if 'images_meta' in locals() else [],
                 "fallback": True,
                 "error": str(e),
             }
@@ -87,7 +119,9 @@ def rescue_query_stream(
                 db=db,
                 session_id=session.session_id,
                 user_input=req.query,
+                user_images=[img['url'] for img in images_meta] if images_meta else None,
                 agent_response=answer,
+                agent_meta=final_meta,
             )
         except Exception:
             logger.exception("对话落库失败")

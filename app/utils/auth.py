@@ -20,7 +20,7 @@ pwd_context = CryptContext(
 )
 
 # OAuth2 密码流配置
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def _pre_hash(password: str) -> str:

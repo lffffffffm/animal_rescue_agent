@@ -1,8 +1,10 @@
 from typing import Optional, List
+
 from sqlalchemy.orm import Session
 from datetime import datetime
 from uuid import uuid4
-from app.db.model import Session as SessionModel, Conversation
+
+from app.db.model import Session as SessionModel, Conversation, UploadedImage
 from app.db.model import User
 
 
@@ -12,7 +14,7 @@ class SessionService:
     """
     
     @staticmethod
-    def create_session(db: Session, user_id: str, title: Optional[str] = None) -> SessionModel:
+    def create_session(db: Session, user_id: int, title: Optional[str] = None) -> SessionModel:
         """
         创建新会话
         """
@@ -37,7 +39,7 @@ class SessionService:
         return db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
     
     @staticmethod
-    def get_sessions_by_user(db: Session, user_id: str, skip: int = 0, limit: int = 100) -> List[SessionModel]:
+    def get_sessions_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[SessionModel]:
         """
         获取用户的所有会话
         """
@@ -65,10 +67,13 @@ class SessionService:
         """
         删除会话及其所有对话记录
         """
-        # 先删除相关的对话记录
+                # 先删除相关的上传图片记录，避免外键约束错误
+        db.query(UploadedImage).filter(UploadedImage.session_id == session_id).delete()
+        
+        # 再删除相关的对话记录
         db.query(Conversation).filter(Conversation.session_id == session_id).delete()
         
-        # 再删除会话记录
+        # 最后删除会话记录
         session = db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
         if session:
             db.delete(session)
@@ -87,14 +92,23 @@ class SessionService:
                  .all()
     
     @staticmethod
-    def add_conversation(db: Session, session_id: str, user_input: str, agent_response: str) -> Conversation:
+    def add_conversation(
+        db: Session,
+        session_id: str,
+        user_input: Optional[str],
+        agent_response: str,
+        user_images: Optional[List[str]] = None,
+        agent_meta: Optional[dict] = None,
+    ) -> Conversation:
         """
         添加对话记录到会话
         """
         conversation = Conversation(
             session_id=session_id,
             user_input=user_input,
-            agent_response=agent_response
+            user_images=user_images,
+            agent_response=agent_response,
+            agent_meta=agent_meta,
         )
         
         db.add(conversation)
@@ -104,7 +118,7 @@ class SessionService:
         return conversation
     
     @staticmethod
-    def get_recent_sessions(db: Session, user_id: str, limit: int = 10) -> List[SessionModel]:
+    def get_recent_sessions(db: Session, user_id: int, limit: int = 10) -> List[SessionModel]:
         """
         获取用户的最近会话
         """
@@ -115,7 +129,7 @@ class SessionService:
                  .all()
     
     @staticmethod
-    def get_session_count(db: Session, user_id: str) -> int:
+    def get_session_count(db: Session, user_id: int) -> int:
         """
         获取用户会话总数
         """

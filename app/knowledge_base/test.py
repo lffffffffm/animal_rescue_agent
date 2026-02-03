@@ -9,20 +9,20 @@ processor = DocumentProcessor()
 chunks = processor.process_file("./data/mock_rescue_data.txt")
 print(f"处理得到 {len(chunks)} 个文档块")
 
-# 文档入库
-vector_store = get_vector_store("animal_rescue_test")
+# 文档入库（对齐 Agent 默认使用的 collection）
+vector_store = get_vector_store("animal_rescue_collection")
 vector_store.add_documents(chunks)
 print("文档已入库")
 
-# 检索测试
-retriever = HybridRetriever(collection_name="animal_rescue_test")
-results = retriever.retrieve("1 + 1 = ?")
+# 检索测试（使用救助相关 query，便于验证召回效果）
+retriever = HybridRetriever(collection_name="animal_rescue_collection")
+results = retriever.retrieve("猫受伤流血怎么办？")
 print(f"检索到 {len(results)} 条相关文档")
 
 # 重排测试
 reranker = Reranker()
 reranked_results = reranker.rerank(
-    query="1 + 1 = ?",
-    documents=[{"content": doc.page_content, "metadata": doc.metadata} for doc in results]
+    query="猫受伤流血怎么办？",
+    documents=results
 )
 print(f"\n重排后返回 {len(reranked_results)} 条文档")

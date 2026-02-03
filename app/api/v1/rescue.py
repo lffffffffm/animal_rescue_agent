@@ -23,13 +23,48 @@ def rescue_query(
         current_user: User = Depends(get_current_active_user),
         db: Session = Depends(get_db),
 ):
-    # 1️⃣ Session（先假设前端以后会传 session_id，这里先省略）
-    session = SessionService.create_session(
-        db=db,
-        user_id=current_user.username,
-        title=req.query[:20]  # todo: 后续修改
+    # 1️⃣ Session：支持前端传 session_id 续聊
+    if req.session_id:
+        session = SessionService.get_session_by_id(db, req.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="会话未找到")
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问此会话")
+    else:
+        session = SessionService.create_session(
+            db=db,
+            user_id=current_user.id,
+            title=req.query[:20]  # todo: 后续修改
+            )
 
-    )
+    image_ids = list(req.image_ids or [])
+    if len(image_ids) > 4:
+        raise HTTPException(status_code=400, detail="最多支持4张图片")
+
+    images_meta = []
+    if image_ids:
+        from app.db.model import UploadedImage
+
+        imgs = db.query(UploadedImage).filter(
+            UploadedImage.image_id.in_(image_ids),
+            UploadedImage.user_id == current_user.id,
+        ).all()
+        found = {i.image_id: i for i in imgs}
+        missing = [i for i in image_ids if i not in found]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"图片不存在或无权限: {missing}")
+
+        images_meta = [
+            {
+                "image_id": found[i].image_id,
+                "url": found[i].url_path,
+                "filename": found[i].original_filename,
+                "content_type": found[i].content_type,
+                "size_bytes": found[i].size_bytes,
+                "uploaded_at": found[i].created_at.isoformat(),
+            }
+            for i in image_ids
+        ]
 
     # 2️⃣ 调 Agent
     try:
@@ -40,6 +75,8 @@ def rescue_query(
             "enable_map": req.enable_map,
             "location": req.location,
             "radius_km": req.radius_km,
+            "image_ids": image_ids,
+            "images": images_meta,
         })
     except Exception as e:
         logger.exception("Agent 执行失败")
@@ -52,7 +89,13 @@ def rescue_query(
         db=db,
         session_id=session.session_id,
         user_input=req.query,
-        agent_response=answer
+        agent_response=answer,
+        agent_meta={
+            "used_web_search": result.get("used_web_search", False),
+            "used_map": result.get("used_map", False),
+            "evidences": result.get("merged_docs", []),
+            "images": images_meta,
+        }
     )
 
     # 4️⃣ 构造 response（⚠️ 关键）

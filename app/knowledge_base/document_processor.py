@@ -6,7 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 
 class DocumentProcessor:
-    def __init__(self, upload_dir: str = "./data", chunk_size: int = 500, chunk_overlap: int = 50):
+    def __init__(self, upload_dir: str = "./data", chunk_size: int = 700, chunk_overlap: int = 100):
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(exist_ok=True)
 
@@ -14,7 +14,7 @@ class DocumentProcessor:
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", "。", "！", "？", ".", "!", "?"]
+            separators = ["\n\n", "\n", "；", "：", "。", "！", "？", ";", ":", ".", "!", "?"]
         )
 
     def load_document(self, file_path: str):
@@ -33,17 +33,25 @@ class DocumentProcessor:
 
     def split_document(self, text: str, source_filename: str = ""):
         """将文档切分为多个小段落"""
-        chunks = self.text_splitter.split_text(text)
+        raw_chunks = self.text_splitter.split_text(text)
 
-        return [
-            {
-                "id": get_doc_id(chunk),
-                "text": chunk,
-                "source": source_filename,
-                "tag": ["chunk"]
-            }
-            for chunk in chunks
-        ]
+        processed = []
+        for idx, chunk in enumerate(raw_chunks):
+            cleaned = " ".join((chunk or "").split())
+            if len(cleaned) < 20:
+                continue
+
+            processed.append(
+                {
+                    "id": get_doc_id(cleaned),
+                    "text": cleaned,
+                    "source": source_filename,
+                    "chunk_index": idx,
+                    "tags": ["chunk"],
+                }
+            )
+
+        return processed
 
     def process_file(self, file_path: str):
         """处理整个文件：加载 -> 切分"""
@@ -59,4 +67,4 @@ class DocumentProcessor:
 
 def get_doc_id(text: str):
     """根据文本生成唯一 ID，保证重复文档不会重复入库"""
-    return int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16) % (10 ** 18)
+    return hashlib.md5(text.encode("utf-8")).hexdigest()

@@ -7,10 +7,12 @@ import LoginModal from './components/LoginModal.vue'
 import {
   tokenStore,
   login as apiLogin,
+  register as apiRegister,
   me as apiMe,
   listSessions,
   getSessionHistory,
   rescueQueryStream,
+  uploadImage,
   updateSessionTitle,
   deleteSession
 } from './services/api'
@@ -38,6 +40,7 @@ const last7Days = computed(() => [])
 const loginVisible = ref(false)
 const loginLoading = ref(false)
 const loginError = ref('')
+let loginReqId = 0
 
 const loading = ref(false)
 const error = ref('')
@@ -101,10 +104,15 @@ async function loadHistory(thread) {
     // eslint-disable-next-line no-await-in-loop
     const hist = await getSessionHistory(sid).catch(() => [])
     for (const h of hist || []) {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+      // 历史图片 URL：若后端已返回绝对 URL 则直接使用；若是相对路径则补齐 API_BASE_URL
+      const images = (h.user_images || []).map((u) => (/^https?:\/\//i.test(u) ? u : `${API_BASE_URL}${u}`))
+
       all.push({
         id: `${sid}:${h.id}:u`,
         role: 'user',
-        content: h.user_input || ''
+        content: h.user_input || '',
+        images: images
       })
       all.push({
         id: `${sid}:${h.id}:a`,
@@ -113,7 +121,7 @@ async function loadHistory(thread) {
       })
     }
   }
-  thread.messages = all
+  thread.messages.splice(0, thread.messages.length, ...all)
 }
 
 async function onSelectChat(id) {
@@ -126,31 +134,55 @@ const editingId = ref(null)
 
 function onEditChat(id) {
   editingId.value = id
+  const t = threads.value.find(i => i.id === id)
+  if (!t) return
+  t.draftTitle = t.title
 }
 
 function onEditInput({ id, title }) {
   const t = threads.value.find(i => i.id === id)
   if (!t) return
-  t.title = title
+  t.draftTitle = title
 }
 
 async function onCommitTitle({ id, title }) {
+  const t = threads.value.find(i => i.id === id)
+  if (!t) {
   editingId.value = null
+    return
+  }
+
   const next = String(title ?? '').trim()
   if (!next) return
 
-  const t = threads.value.find(i => i.id === id)
-  if (!t || t.title === next) return
+  const prev = String(t.title ?? '')
 
-  t.title = next
+  // 先退出编辑态（避免 blur 反复触发）
+  editingId.value = null
 
   const lastSid = t.sessionIds[t.sessionIds.length - 1]
-  if (lastSid && typeof lastSid === 'string') {
-    await updateSessionTitle(lastSid, next).catch(() => {})
+  if (!lastSid || typeof lastSid !== 'string') {
+    // 还没落库的会话（本地新会话），只能更新前端显示
+    t.title = next
+    t.draftTitle = undefined
+    return
+  }
+
+  try {
+    await updateSessionTitle(lastSid, next)
+    t.title = next
+    t.draftTitle = undefined
+  } catch (e) {
+    // 回滚
+    t.title = prev
+    t.draftTitle = prev
+    error.value = e?.message || '更新标题失败'
   }
 }
 
 function onCancelEdit() {
+  const t = threads.value.find(i => i.id === editingId.value)
+  if (t) t.draftTitle = undefined
   editingId.value = null
 }
 
@@ -173,17 +205,25 @@ function onClearGroup(key) {
 const enableWeb = ref(false)
 const enableMap = ref(false)
 
-async function send(text) {
+async function send(payload) {
+  // 调试：打印接收到的数据
+  console.log('App.vue received send event with payload:', payload);
+
   const t = ensureThread()
   error.value = ''
 
-  const userMsg = { id: `u:${Date.now()}`, role: 'user', content: text }
+  const text = typeof payload === 'string' ? payload : (payload?.text || '')
+  const files = typeof payload === 'string' ? [] : (payload?.files || [])
+  const previews = typeof payload === 'string' ? [] : (payload?.previews || [])
+
+  const userMsgId = `u:${Date.now()}`
+  const userMsg = { id: userMsgId, role: 'user', content: text, images: previews }
   t.messages.push(userMsg)
 
   let chat_history = t.messages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-10)
-    .map(m => `${m.role}: ${m.content}`)
+    .map(({ role, content }) => ({ role, content }))
 
   if (!Array.isArray(chat_history)) {
     console.error('chat_history 不是数组:', chat_history)
@@ -198,7 +238,22 @@ async function send(text) {
 
   try {
     const lastSid = t.sessionIds[t.sessionIds.length - 1]
-    const session_id = typeof lastSid === 'string' ? lastSid : null
+    let session_id = typeof lastSid === 'string' ? lastSid : null
+
+    // 先上传图片（最多4张）
+    const image_ids = []
+    if (Array.isArray(files) && files.length) {
+      const limited = files.slice(0, 4)
+      for (const f of limited) {
+        // eslint-disable-next-line no-await-in-loop
+        const up = await uploadImage(f, session_id)
+        if (up?.session_id && !t.sessionIds.includes(up.session_id)) {
+          t.sessionIds.push(up.session_id)
+        }
+        if (up?.session_id) session_id = up.session_id
+        if (up?.image_id) image_ids.push(up.image_id)
+      }
+    }
 
     await rescueQueryStream({
       query: text,
@@ -206,6 +261,7 @@ async function send(text) {
       chat_history,
       enable_web_search: enableWeb.value,
       enable_map: enableMap.value,
+      image_ids,
       onDelta: (payload) => {
         const delta = payload?.text ?? ''
         assistantMsg.content += delta
@@ -222,13 +278,17 @@ async function send(text) {
           }
         }
 
+        // 若后端返回 images 元数据，追加到 assistant 消息以便前端展示
+        if (Array.isArray(meta?.images) && meta.images.length) {
+          assistantMsg.images = meta.images.map(i => i.url || i)
+        }
+
         if (t.title === 'New chat') t.title = text
       }
     })
   } catch (e) {
-    // 如果流式失败，把占位的 assistant 消息替换为错误提示
-    assistantMsg.content = ''
-    t.messages = t.messages.filter(m => m.id !== assistantId)
+    // 失败：回滚本次 user/assistant 消息，避免看起来“已经发出去了”
+    t.messages = t.messages.filter(m => m.id !== assistantId && m.id !== userMsgId)
     error.value = e?.message || '发送失败'
   } finally {
     loading.value = false
@@ -258,17 +318,41 @@ async function boot() {
   }
 }
 
-async function onLoginSubmit({ username, password }) {
+function onAuthModeChange() {
+  loginReqId += 1
+  loginError.value = ''
+  loginLoading.value = false
+}
+
+async function onLoginSubmit(payload) {
+  const rid = ++loginReqId
   loginError.value = ''
   loginLoading.value = true
+
+  const mode = payload?.mode || 'login'
+  const username = payload?.username
+  const password = payload?.password
+  const email = payload?.email
+
   try {
+    if (mode === 'register') {
+      if (!username || !email || !password) {
+        throw new Error('请填写 Username / Email / Password')
+      }
+      await apiRegister({ username, email, password })
+    }
+
     await apiLogin(username, password)
     loginVisible.value = false
     await boot()
   } catch (e) {
-    loginError.value = e?.message || '登录失败'
+    if (rid === loginReqId) {
+      loginError.value = e?.message || (mode === 'register' ? '注册失败' : '登录失败')
+    }
   } finally {
-    loginLoading.value = false
+    if (rid === loginReqId) {
+      loginLoading.value = false
+    }
   }
 }
 
@@ -323,6 +407,7 @@ onMounted(() => {
       :loading="loginLoading"
       :error="loginError"
       @submit="onLoginSubmit"
+      @mode-change="onAuthModeChange"
     />
   </div>
 </template>

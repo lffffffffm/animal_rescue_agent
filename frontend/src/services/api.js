@@ -68,6 +68,21 @@ export async function me() {
   return request('/auth/me')
 }
 
+export async function register({ username, email, password }) {
+  return request('/auth/register', {
+    method: 'POST',
+    auth: false,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      username,
+      email,
+      password
+    })
+  })
+}
+
 export async function listSessions() {
   return request('/session')
 }
@@ -92,7 +107,7 @@ export async function deleteSession(sessionId) {
   return request(`/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
 }
 
-export async function rescueQuery({ query, chat_history = [], enable_web_search = false, enable_map = false, location = null, radius_km = 5 }) {
+export async function rescueQuery({ query, chat_history = [], enable_web_search = false, enable_map = false, location = null, radius_km = 5, image_ids = [] }) {
   return request('/query', {
     method: 'POST',
     headers: {
@@ -104,7 +119,8 @@ export async function rescueQuery({ query, chat_history = [], enable_web_search 
       enable_web_search,
       enable_map,
       location,
-      radius_km
+      radius_km,
+      image_ids
     })
   })
 }
@@ -124,6 +140,7 @@ export async function rescueQueryStream({
   enable_map = false,
   location = null,
   radius_km = 5,
+  image_ids = [],
   onDelta,
   onDone
 } = {}) {
@@ -137,6 +154,7 @@ export async function rescueQueryStream({
     enable_map,
     location,
     radius_km,
+    image_ids,
     ...(session_id ? { session_id } : {})
   }
 
@@ -202,4 +220,32 @@ export async function rescueQueryStream({
   }
 
   flush()
+}
+
+export async function uploadImage(file, session_id = null) {
+  const token = tokenStore.get()
+  const form = new FormData()
+  form.append('file', file)
+  if (session_id) form.append('session_id', session_id)
+
+  const res = await fetch(`${API_BASE_URL}/upload/image`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: form
+  })
+
+  const isJson = (res.headers.get('content-type') || '').includes('application/json')
+  const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => '')
+
+  if (!res.ok) {
+    const msg = typeof data === 'object' && data?.detail ? data.detail : `请求失败: ${res.status}`
+    const err = new Error(msg)
+    err.status = res.status
+    err.data = data
+    throw err
+  }
+
+  return data
 }
