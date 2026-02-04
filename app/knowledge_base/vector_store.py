@@ -33,7 +33,7 @@ class QdrantHybridStore:
                 api_key=getattr(settings, "QDRANT_API_KEY", None),
             )
         else:
-            self.client = QdrantClient(location=":memory:")
+            self.client = QdrantClient(location=":memory:", host="localhost")
 
         # 配置embedding模型（离线优先，由 embedding_manager 内部读取 settings 配置）
         self.embedding_manager = initialize_embedding_model()

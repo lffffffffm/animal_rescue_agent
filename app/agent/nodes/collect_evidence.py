@@ -1,3 +1,5 @@
+# app/agent/nodes/collect_evidence.py
+
 from __future__ import annotations
 
 import time
@@ -135,30 +137,31 @@ def collect_evidence(state: AgentState) -> AgentState:
     if use_kb:
         base_top_k = settings.RETRIEVAL_TOP_K
         step = 5
-        max_retry = 3
+        max_retry = settings.MAX_RETRY
+
+        # 创建一个可变的状态副本进行操作，确保状态不会丢失
+        mutable_state = dict(state)
 
         for attempt in range(max_retry):
             top_k = base_top_k + attempt * step
             try:
-                kb_state = {
-                    **state,
-                    "query": query,
-                    # 注意：这里 attempt 表示“第几轮”，而不是旧语义的 retry_count
-                    "retry_count": attempt,
-                    "force_top_k": top_k,
-                }
+                # 直接在 mutable_state 上更新和传递
+                mutable_state["query"] = query
+                mutable_state["force_top_k"] = top_k
 
-                kb_state = retrieve_documents(kb_state)
-                kb_state = rerank_documents(kb_state)
+                retrieved_state = retrieve_documents(mutable_state)
+                reranked_state = rerank_documents(retrieved_state)
 
-                kb_docs = kb_state.get("kb_docs", []) or []
+                # 从返回的状态中更新 mutable_state
+                mutable_state.update(reranked_state)
 
-                enough = len(kb_docs) >= settings.MIN_DOCS_REQUIRED
+                current_kb_docs = mutable_state.get("kb_docs", [])
+                enough = len(current_kb_docs) >= settings.MIN_DOCS_REQUIRED
 
                 kb_attempts.append({
                     "attempt": attempt + 1,
                     "top_k": top_k,
-                    "kept": len(kb_docs),
+                    "kept": len(current_kb_docs),
                     "enough": enough,
                 })
 
@@ -175,16 +178,17 @@ def collect_evidence(state: AgentState) -> AgentState:
                 })
                 logger.exception("collect_evidence_node: KB 检索失败")
 
-        # 将最终 attempt 写回 retry_count（便于你后续观察/展示）
+        # 将最终结果从 mutable_state 中提取
+        kb_docs = mutable_state.get("kb_docs", [])
         final_retry_count = len(kb_attempts)
-        state = {**state, "retry_count": final_retry_count}
+        mutable_state["retry_count"] = final_retry_count
 
     # ===== 2) WebSearch =====
     if use_web:
         try:
-            web_state = {**state, "query": query}
-            web_state = web_search_node(web_state)
-            web_facts = web_state.get("web_facts", []) or []
+            web_state = web_search_node({**mutable_state, "query": query})
+            mutable_state.update(web_state)
+            web_facts = mutable_state.get("web_facts", [])
         except Exception as e:
             web_error = str(e)
             logger.exception("collect_evidence_node: WebSearch 失败")
@@ -192,11 +196,11 @@ def collect_evidence(state: AgentState) -> AgentState:
     # ===== 3) MapSearch =====
     if use_map:
         try:
-            location = _clean_text(state.get("location"))
+            location = _clean_text(mutable_state.get("location"))
             if not location:
                 raise ValueError("location 为空，无法调用 map")
 
-            radius_raw = map_params.get("radius_km") or state.get("radius_km") or 5
+            radius_raw = map_params.get("radius_km") or mutable_state.get("radius_km") or 5
             try:
                 radius_km = int(radius_raw)
             except Exception:
@@ -221,6 +225,11 @@ def collect_evidence(state: AgentState) -> AgentState:
 
     elapsed_ms = int((time.time() - start) * 1000)
 
+    # 确保 decision_trace 是列表
+    decision_trace = mutable_state.get("decision_trace") or []
+    if not isinstance(decision_trace, list):
+        decision_trace = []
+
     decision_trace.append({
         "node": "collect_evidence_node",
         "use_kb": use_kb,
@@ -242,11 +251,11 @@ def collect_evidence(state: AgentState) -> AgentState:
         f"latency_ms={elapsed_ms}"
     )
 
+    # ✅ 正确：返回最终更新后的完整状态
     return {
-        **state,
+        **mutable_state,
         "kb_docs": kb_docs,
         "web_facts": web_facts,
         "map_result": map_result,
         "decision_trace": decision_trace,
     }
-

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
 import LoginModal from './components/LoginModal.vue'
@@ -34,8 +34,19 @@ function toggleSidebar() {
 const threads = ref([])
 const activeId = ref(null)
 
-const recent = computed(() => threads.value)
-const last7Days = computed(() => [])
+const thisWeek = computed(() => {
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setHours(0, 0, 0, 0)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  return threads.value.filter(t => new Date(t.createdAt) >= sevenDaysAgo)
+})
+
+const weekBefore = computed(() => {
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setHours(0, 0, 0, 0)
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  return threads.value.filter(t => new Date(t.createdAt) < sevenDaysAgo)
+})
 
 const loginVisible = ref(false)
 const loginLoading = ref(false)
@@ -114,6 +125,13 @@ async function loadHistory(thread) {
         content: h.user_input || '',
         images: images
       })
+      let assistantImages = [];
+      if (h.agent_meta && h.agent_meta.images && Array.isArray(h.agent_meta.images)) {
+          assistantImages = h.agent_meta.images.map(img => {
+              const url = img.url || img; // 兼容 {url: '...'} 和 '...' 两种格式
+              return /^https?:\/\//i.test(url) ? url : `${API_BASE_URL}${url}`;
+          });
+      }
       all.push({
         id: `${sid}:${h.id}:a`,
         role: 'assistant',
@@ -204,6 +222,44 @@ function onClearGroup(key) {
 
 const enableWeb = ref(false)
 const enableMap = ref(false)
+const location = ref('') // 用于存储经纬度
+
+watch(enableMap, (newVal) => {
+  if (newVal) {
+    if (!navigator.geolocation) {
+      showToast('您的浏览器不支持地理位置。', 'error')
+      enableMap.value = false
+      return
+    }
+
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          location.value = `${latitude},${longitude}`
+        },
+        (err) => {
+          // https://developer.mozilla.org/en-US/docs/Web/API/GeolocationPositionError/code
+          // 1: PERMISSION_DENIED, 2: POSITION_UNAVAILABLE, 3: TIMEOUT
+          let msg = '获取不到当前地理位置信息。'
+          if (err?.code === 1) msg = '已拒绝访问地理位置权限，获取不到当前地理位置信息。'
+          else if (err?.code === 2) msg = '当前位置不可用，获取不到当前地理位置信息。'
+          else if (err?.code === 3) msg = '获取地理位置超时，获取不到当前地理位置信息。'
+
+          console.warn('[geolocation] failed:', err)
+          alert(msg)
+          enableMap.value = false
+        },
+        { timeout: 10000 }
+      )
+    } catch (e) {
+      showToast('获取不到当前地理位置信息。', 'error')
+      enableMap.value = false
+    }
+  } else {
+    location.value = ''
+  }
+})
 
 async function send(payload) {
   // 调试：打印接收到的数据
@@ -255,18 +311,40 @@ async function send(payload) {
       }
     }
 
+    let deltaBuffer = ''
+    let rafId = null
+
+    const flush = () => {
+      if (!deltaBuffer) return
+      const idx = t.messages.findIndex(m => m.id === assistantId)
+      if (idx >= 0) {
+        const prev = t.messages[idx]
+        t.messages[idx] = { ...prev, content: (prev.content || '') + deltaBuffer }
+      }
+      deltaBuffer = ''
+      rafId = null
+    }
+
     await rescueQueryStream({
       query: text,
       session_id,
       chat_history,
       enable_web_search: enableWeb.value,
       enable_map: enableMap.value,
+      location: enableMap.value ? location.value : null,
       image_ids,
       onDelta: (payload) => {
         const delta = payload?.text ?? ''
-        assistantMsg.content += delta
+        if (!delta) return
+        deltaBuffer += delta
+        if (!rafId) rafId = requestAnimationFrame(flush)
       },
       onDone: (meta) => {
+        if (rafId) {
+          cancelAnimationFrame(rafId)
+          flush()
+        }
+
         if (meta?.session_id && !t.sessionIds.includes(meta.session_id)) {
           t.sessionIds.push(meta.session_id)
 
@@ -373,8 +451,8 @@ onMounted(() => {
   <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <Sidebar
       :user="user"
-      :recent="recent"
-      :last7-days="last7Days"
+      :recent="thisWeek"
+      :last7-days="weekBefore"
       :active-id="activeId"
       :editing-id="editingId"
       :collapsed="sidebarCollapsed"

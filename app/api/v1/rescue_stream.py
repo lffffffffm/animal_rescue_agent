@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 from typing import Generator, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,22 +38,34 @@ def _validate_or_create_session(db: Session, current_user: User, req: AnimalResc
 
 
 @router.post("/stream")
-def rescue_query_stream(
+async def rescue_query_stream(
     req: AnimalRescueQueryRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     session = _validate_or_create_session(db, current_user, req)
 
-    def gen() -> Generator[str, None, None]:
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def writer(delta: str):
+        if not delta:
+            return
+        loop.call_soon_threadsafe(queue.put_nowait, _sse("delta", {"text": delta}))
+
+    async def event_stream():
         final_meta: Optional[dict] = None
+        answer: str = ""
+        images_meta = []
+
+        # 先发一个连接确认事件，便于前端知道 SSE 已建立
+        yield _sse("start", {"status": "connected"})
 
         try:
             raw_image_ids = list(req.image_ids or [])
             if len(raw_image_ids) > 4:
                 raise HTTPException(status_code=400, detail="最多支持4张图片")
 
-            images_meta = []
             if raw_image_ids:
                 imgs = db.query(UploadedImage).filter(
                     UploadedImage.image_id.in_(raw_image_ids),
@@ -76,25 +89,44 @@ def rescue_query_stream(
                     for i in raw_image_ids
                 ]
 
-            result = agent_app.invoke({
-                "query": req.query,
-                "chat_history": req.chat_history or [],
-                "enable_web_search": req.enable_web_search,
-                "enable_map": req.enable_map,
-                "location": req.location,
-                "radius_km": req.radius_km,
-                "image_ids": [img["url"] for img in images_meta] if images_meta else [],
-                "images": images_meta,
-            })
+            # 并行执行：一边跑图，一边持续消费队列
+            async def run_agent():
+                nonlocal final_meta, answer
+                result = await agent_app.ainvoke({
+                    "query": req.query,
+                    "chat_history": req.chat_history or [],
+                    "enable_web_search": req.enable_web_search,
+                    "enable_map": req.enable_map,
+                    "location": req.location,
+                    "radius_km": req.radius_km,
+                    "image_ids": [img["url"] for img in images_meta] if images_meta else [],
+                    "images": images_meta,
+                    "writer": writer,
+                })
+                answer = result.get("response", "") or ""
+                final_meta = {
+                    "used_web_search": result.get("used_web_search", False),
+                    "used_map": result.get("used_map", False),
+                    "evidences": result.get("merged_docs", []),
+                    "rescue_resources": result.get("rescue_resources", []) if result.get("map_result") else None,
+                    "images": images_meta,
+                }
 
-            answer = result.get("response", "") or ""
-            final_meta = {
-                "used_web_search": result.get("used_web_search", False),
-                "used_map": result.get("used_map", False),
-                "evidences": result.get("merged_docs", []),
-                "rescue_resources": result.get("rescue_resources", []) if result.get("map_result") else None,
-                "images": images_meta,
-            }
+            # 启动后台任务
+            agent_task = asyncio.create_task(run_agent())
+
+            # 持续消费队列，直到 agent_task 完成
+            while not agent_task.done():
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    yield msg
+                except asyncio.TimeoutError:
+                    # 定期发心跳，防止缓冲区不动
+                    yield _sse("heartbeat", {"status": "waiting"})
+                    continue
+
+            # 等待 agent_task 结束（如果有异常会在这里抛出）
+            await agent_task
 
         except Exception as e:
             logger.exception("Agent 执行失败（stream），返回兜底答案")
@@ -104,14 +136,16 @@ def rescue_query_stream(
                 "used_map": False,
                 "evidences": [],
                 "rescue_resources": None,
-                "images": images_meta if 'images_meta' in locals() else [],
+                "images": images_meta,
                 "fallback": True,
                 "error": str(e),
             }
+            # 兜底也走一次性输出（不拆字符）
+            yield _sse("delta", {"text": answer})
 
-        # 增量推送（兼容版：按字符推送）
-        for ch in answer:
-            yield _sse("delta", {"text": ch})
+        # 吐出队列里剩余的 delta（防止最后几 token 丢失）
+        while not queue.empty():
+            yield await queue.get()
 
         # 落库
         try:
@@ -128,4 +162,12 @@ def rescue_query_stream(
 
         yield _sse("done", {"session_id": session.session_id, **(final_meta or {})})
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+        }
+    )

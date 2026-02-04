@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional, Callable
 
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
@@ -86,46 +86,49 @@ def _generate_instruction(state: AgentState) -> str:
         "2. 回答需准确、清晰、结构化，优先使用分点说明。",
         "3. 全程使用中文回答，风格专业、冷静、富有同情心。",
         "4. 不要使用“作为AI模型”之类的表述。",
+        "5. 表达要自然、像在对话：避免固定套话开头与重复声明；安全提醒只在与问题相关或存在风险时给出。",
+        "6. 结构贴合问题：能用短段落讲清就不要硬套固定框架；需要步骤时再用清单。",
+        "7. 若参考资料不足：明确说明不确定之处，并提出 1~3 个关键追问以补齐信息。",
     ]
 
     if mode == "emergency":
         instructions.extend([
-            "5. **最高优先级**：立即从【参考资料】中提炼出【立即可做】的急救步骤清单，语言必须直接、清晰。",
-            "6. 如果资料中有【附近救助资源】，请在回答末尾清晰列出。",
-            "7. 附带强烈的安全提醒，敦促用户尽快就医。",
+            "- **最高优先级**：立即从【参考资料】中提炼出【立即可做】的急救步骤清单，语言必须直接、清晰。",
+            "- 如果资料中有【附近救助资源】，请在回答末尾清晰列出。",
+            "- 附带强烈的安全提醒，敦促用户尽快就医。",
         ])
         if suff.get("strong_warning"):
-            instructions.append("8. 在开头强调【信息有限但可能存在较高风险】，敦促用户不要等待。")
+            instructions.append("- 在开头强调【信息有限但可能存在较高风险】，敦促用户不要等待。")
 
     elif mode == "hybrid":
         instructions.extend([
-            "5. **先**给出一个简短的【安全提醒】，告知用户在何种情况下应立即就医。",
-            "6. **然后**，基于【参考资料】对用户的问题进行科普解释，可以探讨多种可能性。",
-            "7. **明确指出**：由于是线上咨询/非真实场景，结论存在不确定性。",
+            "- **先**给出一个简短的【安全提醒】，告知用户在何种情况下应立即就医。",
+            "- **然后**，基于【参考资料】对用户的问题进行科普解释，可以探讨多种可能性。",
+            "- **明确指出**：由于是线上咨询/非真实场景，结论存在不确定性。",
         ])
         if suff_level in {"PARTIAL", "INSUFFICIENT"} and followups:
-            instructions.append("8. 在回答末尾，礼貌地提出以下【关键补充信息】问题，以帮助更准确地判断：\n" + "\n".join(
-                [f"- {q}" for q in followups]))
+            instructions.append("- 在回答末尾，礼貌地提出以下【关键补充信息】问题（1~3个），以帮助更准确地判断：\n" + "\n".join(
+                [f"  - {q}" for q in followups[:3]]))
 
     else:  # normal
         if suff_level == "INSUFFICIENT":
             instructions.extend([
-                "5. **不要猜测答案**。明确告知用户【当前信息不足】。",
-                "6. 以礼貌、引导的方式，提出以下问题以获取更多信息：\n" + "\n".join([f"- {q}" for q in followups]),
+                "- **不要猜测答案**。明确告知用户【当前信息不足】。",
+                "- 以礼貌、引导的方式，提出 1~3 个关键问题以获取更多信息：\n" + "\n".join([f"  - {q}" for q in followups[:3]]),
             ])
         elif suff_level == "PARTIAL":
             instructions.extend([
-                "5. 基于有限的【参考资料】给出一个保守的、倾向性的建议。",
-                "6. **明确说明**你的回答存在不确定性。",
-                "7. 在结尾附上需要补充的问题，以获得更准确的建议。",
+                "- 基于有限的【参考资料】给出一个保守的、倾向性的建议。",
+                "- **明确说明**你的回答存在不确定性。",
+                "- 在结尾附上需要补充的 1~3 个问题，以获得更准确的建议。",
             ])
         else:  # ENOUGH
-            instructions.append("5. 提供一个全面、自信的回答。")
+            instructions.append("- 提供一个全面、自信的回答。")
 
     return "\n".join(instructions)
 
 
-def respond(state: AgentState) -> AgentState:
+async def respond(state: AgentState) -> AgentState:
     """
     respond_node (LLM驱动版)：
     1. 打包所有证据 (context)
@@ -133,6 +136,7 @@ def respond(state: AgentState) -> AgentState:
     3. 调用 LLM 生成最终回复
     4. 失败时回退到安全模板
     """
+    writer_fn: Optional[Callable[[str], None]] = state.get("writer")
     query = _clean_text(state.get("rewrite_query") or state.get("normalized_query") or state.get("query"))
     mode = (state.get("gate") or {}).get("mode", "normal")
 
@@ -142,6 +146,7 @@ def respond(state: AgentState) -> AgentState:
     # 2. 生成指令
     instruction = _generate_instruction(state)
 
+    answer_parts = []  
     # 3. 调用 LLM
     try:
         # 使用 Template.safe_substitute 避免花括号冲突
@@ -150,9 +155,17 @@ def respond(state: AgentState) -> AgentState:
             query=query,
             instruction=instruction
         )
-        llm = get_llm().llm
-        resp = llm.invoke([HumanMessage(content=prompt)])
-        response = (resp.content or "").strip()
+        llm = get_llm()
+
+        async for chunk in llm.astream([HumanMessage(content=prompt)]):
+            delta = chunk.content or ""
+            if writer_fn:
+                writer_fn(delta)
+            answer_parts.append(delta)
+
+        response = "".join(answer_parts).strip()
+        if not response:
+            raise ValueError("LLM returned empty response.")
 
         if not response:
             raise ValueError("LLM returned empty response.")

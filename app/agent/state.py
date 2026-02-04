@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Callable, Any
 from typing_extensions import TypedDict
 from langchain.schema import Document
 
@@ -39,6 +39,9 @@ class AgentState(TypedDict, total=False):
     # ===== old flow / optional =====
     merged_docs: List[dict]                 # 旧流程字段（如不用可删）
     evidences: Optional[list[dict]]         # 未来 evidence_pack_node 可用
+
+    # ===== streaming =====
+    writer: Optional[Callable[[str], Any]]
 
     # ===== output =====
     response: Optional[str]

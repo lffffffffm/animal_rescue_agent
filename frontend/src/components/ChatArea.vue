@@ -89,7 +89,7 @@
                   <span>联网</span>
                 </button>
 
-                <button class="pill" type="button" :class="{ on: enableMap }" @click.stop="$emit('update:enableMap', !enableMap)">
+                <button class="pill" type="button" :class="{ on: enableMap }" title="开启后可获取附近医疗资源" @click.stop="$emit('update:enableMap', !enableMap)">
                   <svg class="pill-ico" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>
                   <span>地图</span>
                 </button>
@@ -284,10 +284,11 @@ async function scrollToBottom() {
 }
 
 watch(
-  () => [props.activeThread?.id, props.messages.length, props.loading],
+  () => props.messages,
   () => {
     scrollToBottom()
-  }
+  },
+  { deep: true }
 )
 </script>
 

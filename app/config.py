@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     # Qdrant 配置
-    QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+    QDRANT_URL: str = os.getenv("QDRANT_URL")
     QDRANT_API_KEY: str | None = os.getenv("QDRANT_API_KEY", None)
     QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "animal_rescue_collection")
 
@@ -66,7 +66,12 @@ class Settings(BaseSettings):
     VISION_MODEL: str = os.getenv("VISION_MODEL", "")
     VISION_TIMEOUT_SEC: int = int(os.getenv("VISION_TIMEOUT_SEC", "30"))
 
-    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "")
+    # COS配置
+    COS_BASE_URL: str = os.getenv("COS_BASE_URL", "")
+    COS_SECRET_ID: str = os.getenv("COS_SECRET_ID", "")
+    COS_SECRET_KEY: str = os.getenv("COS_SECRET_KEY", "")
+    COS_REGION: str = os.getenv("COS_REGION", "")
+    COS_BUCKET: str = os.getenv("COS_BUCKET", "")
 
     class Config:
         env_file = ".env"
