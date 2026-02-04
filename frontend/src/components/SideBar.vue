@@ -17,7 +17,7 @@
         <div class="sidebar-scroll">
           <div class="group">
             <div class="group-hd">
-              <div class="group-title">会话记录</div>
+              <div class="group-title">最近一周</div>
               <button class="clear" v-if="filteredRecent.length" @click="$emit('clear-group', 'recent')">清空</button>
             </div>
 
