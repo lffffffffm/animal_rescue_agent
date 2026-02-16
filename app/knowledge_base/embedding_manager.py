@@ -1,6 +1,6 @@
 from loguru import logger
 from typing import List, Union
-
+import torch
 from langchain_core.embeddings import Embeddings
 
 from app.config import settings
@@ -58,9 +58,10 @@ class EmbeddingManager:
                 raise e
 
             # 初始化 LangChain Embeddings
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             self._embeddings = HuggingFaceEmbeddings(
                 model_name=model_to_load,
-                model_kwargs={"device": "cpu"},
+                model_kwargs={"device": device,"trust_remote_code": True},
                 encode_kwargs={"normalize_embeddings": True},
             )
 
@@ -82,16 +83,25 @@ class EmbeddingManager:
             self._initialize_embeddings()
         return self._embeddings
 
-    def embed_texts(self, texts: Union[str, List[str]]) -> List[List[float]]:
+    @property
+    def dimension(self) -> int:
+        """获取当前模型的向量维度，用于 Qdrant 初始化"""
+        # 预运行一次，获取维度
+        test_vec = self.embed_query("维度探测")
+        return len(test_vec)
+
+    def embed_texts(self, texts: Union[str, List[str]], batch_size: int = 32) -> List[List[float]]:
         """
         对文本进行嵌入编码
         """
         if isinstance(texts, str):
             texts = [texts]
         try:
-            embeddings_result = self._embeddings.embed_documents(texts)
-            logger.info(f"成功生成 {len(texts)} 个文本的嵌入向量")
-            return embeddings_result
+            results = []
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i: i + batch_size]
+                results.extend(self._embeddings.embed_documents(batch))
+            return results
         except Exception as e:
             logger.error(f"生成文本嵌入失败: {str(e)}")
             raise
@@ -135,27 +145,4 @@ def initialize_embedding_model() -> EmbeddingManager:
 
 
 if __name__ == "__main__":
-    # 这个测试现在会依赖 .env 里的配置
-    # 请确保 .env 中有 EMBEDDING_MODEL 或 EMBEDDING_MODEL_PATH
-    print("🚀 初始化嵌入模型中...")
-    embedder = initialize_embedding_model()
-
-    texts = [
-        "流浪动物救助需要专业的医疗支持",
-        "受伤的猫咪应该尽快送往动物医院",
-        "动物救助站需要志愿者协助"
-    ]
-
-    print("📌 正在生成文本向量...")
-    embeddings = embedder.embed_texts(texts)
-
-    print(f"生成向量数量: {len(embeddings)}")
-    print(f"单个向量维度: {len(embeddings[0])}")
-
-    query = "如何救助受伤的流浪猫"
-    print("🔍 正在生成查询向量...")
-    query_vec = embedder.embed_query(query)
-
-    print(f"查询向量维度: {len(query_vec)}")
-
-    print("✅ 测试完成，一切正常！")
+    pass

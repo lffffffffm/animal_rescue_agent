@@ -2,6 +2,7 @@ from loguru import logger
 from typing import List
 from langchain_core.documents import Document
 from app.config import settings
+from app.knowledge_base.reranker import get_reranker
 from app.knowledge_base.vector_store import get_vector_store
 
 
@@ -17,22 +18,28 @@ class HybridRetriever:
     ):
         self.collection_name = collection_name
         self.top_k = top_k
+        self.reranker = get_reranker(top_n=top_k)
         self.vector_store = get_vector_store(collection_name)
 
-    def retrieve(self, query: str) -> List[Document]:
+    def retrieve(self, query: str, species: str = None) -> List[Document]:
         logger.info(f"Hybrid 检索查询: {query}")
 
-        retriever = self.vector_store.get_retriever(k=self.top_k)
-        docs = retriever.invoke(query)
-        if docs:
-            logger.info(f"返回 {len(docs)} 条文档")
-        else:
-            logger.info("无匹配文档")
+        base_retriever = self.vector_store.get_retriever(
+            k=15,
+            species=species
+        )
+        # 获取粗排结果
+        initial_docs = base_retriever.invoke(query)
+        if not initial_docs:
+            return []
 
-        return docs
+        final_docs = self.reranker.rerank(query, initial_docs)
+
+        return final_docs
 
 
 _retriever_cache: dict[int, HybridRetriever] = {}
+
 
 # 未来可以扩展不同name的collection
 def get_retriever(top_k: int | None = None) -> HybridRetriever:

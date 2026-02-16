@@ -1,10 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import os
-from starlette.staticfiles import StaticFiles
 from app.api import health, v1
-from app.config import settings
 from loguru import logger
 from app.db import init_db
 
@@ -13,9 +10,14 @@ from app.db import init_db
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时：创建数据库表
-    logger.info("启动应用...")
-    logger.info("初始化数据库...")
-    init_db()
+    try:
+        logger.info("启动应用...")
+        logger.info("初始化数据库...")
+        init_db()
+        logger.info("数据库初始化成功")
+    except Exception as e:
+        logger.error(f"数据库初始化失败: {e}")
+        raise
     yield
 
     # 关闭时：清理资源
