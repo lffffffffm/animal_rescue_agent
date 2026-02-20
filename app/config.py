@@ -19,18 +19,27 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL")
 
     # 向量数据库配置
-    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./data/vectors")
+    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
     EMBEDDING_OFFLINE: bool = os.getenv("EMBEDDING_OFFLINE", "true").lower() == "true"
     EMBEDDING_MODEL_PATH: str = os.getenv("EMBEDDING_MODEL_PATH", "")
 
     # 数据库配置
-    DATABASE_URL: str = os.getenv("DATABASE_URL")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./vector_db")
 
     # Qdrant 配置
-    QDRANT_URL: str = os.getenv("QDRANT_URL")
+    QDRANT_URL: str = os.getenv("QDRANT_URL", "")
     QDRANT_API_KEY: str | None = os.getenv("QDRANT_API_KEY", None)
     QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "animal_rescue_collection")
+
+    # 稀疏嵌入模型配置
+    SPARSE_EMBEDDING_MODEL: str = os.getenv("SPARSE_EMBEDDING_MODEL", "Qdrant/bm25")
+    SPARSE_EMBEDDING_CACHE_DIR: str = os.getenv("SPARSE_EMBEDDING_CACHE_DIR", "./models")
+    SPARSE_EMBEDDING_LOCAL_ONLY: bool = os.getenv("SPARSE_EMBEDDING_LOCAL_ONLY", "True").lower() == "true"
+
+    # 知识库配置
+    KNOWLEDGE_BASE_PATH: str = os.getenv("KNOWLEDGE_BASE_PATH", "./knowledge_base")
 
     # 地图相关配置
     AMAP_API_KEY: str = os.getenv("AMAP_API_KEY", None)
@@ -39,7 +48,7 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", None)
 
     # 知识库配置
-    KNOWLEDGE_BASE_PATH: str = os.getenv("KNOWLEDGE_BASE_PATH", "./data/knowledge")
+    KNOWLEDGE_BASE_PATH: str = os.getenv("KNOWLEDGE_BASE_PATH", "")
 
     # API配置
     API_V1_STR: str = "/api/v1"
@@ -54,6 +63,7 @@ class Settings(BaseSettings):
     # rerank相关配置
     RERANK_TOP_K: int = 5
     MIN_RERANK_SCORE: float = 0.55
+    RERANK_MODEL_PATH: str = os.getenv("RERANK_MODEL_PATH", "")
 
     # 认证配置
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

@@ -204,14 +204,7 @@ docker-compose up -d --build
 ---
 ## 📹 演示
 ### 系统演示视频
-<div align="center">
-  <video src="https://image-bucket-lfm-1402311803.cos.ap-guangzhou.myqcloud.com/%E6%BC%94%E7%A4%BA%E8%A7%86%E9%A2%91.mp4" controls width="100%">
-    您的浏览器不支持视频标签。
-  </video>
-  <p align="center">
-    <sub>注：如果 GitHub 无法直接加载，请 <a href="https://image-bucket-lfm-1402311803.cos.ap-guangzhou.myqcloud.com/%E6%BC%94%E7%A4%BA%E8%A7%86%E9%A2%91.mp4" target="_blank">点击此处在新窗口中播放</a></sub>
-  </p>
-</div>
+[【流浪动物救助智能问答平台演示】](https://www.bilibili.com/video/BV1GBf3BAEWh?t=46.4)
 
 ---
 

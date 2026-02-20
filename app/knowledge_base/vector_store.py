@@ -50,8 +50,8 @@ class QdrantHybridStore:
             collection_name=self.collection_name,
             embedding=self.embedding_manager.embeddings,  # 配置embedding模型
             sparse_embedding=FastEmbedSparse(
-                model_name="Qdrant/bm25",
-                cache_dir="C:/models",
+                model_name=settings.SPARSE_EMBEDDING_MODEL,
+                cache_dir=settings.SPARSE_EMBEDDING_CACHE_DIR,
                 local_files_only=True
             ),
             retrieval_mode=RetrievalMode.HYBRID,

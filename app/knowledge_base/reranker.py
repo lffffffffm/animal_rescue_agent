@@ -3,6 +3,8 @@ from langchain_core.documents import Document
 from loguru import logger
 from sentence_transformers import CrossEncoder
 
+from app.config import settings
+
 _default_reranker = None
 
 
@@ -14,7 +16,7 @@ class Reranker:
 
     def __init__(
             self,
-            model_name: str = "C:/models/bge-reranker-base",
+            model_name: str = settings.RERANK_MODEL_PATH,
             top_n: int = 5
     ):
         """
@@ -107,7 +109,7 @@ class Reranker:
 
 
 def get_reranker(
-        model_name: str = "C:/models/bge-reranker-base",
+        model_name: str = settings.RERANK_MODEL_PATH,
         top_n: int = 5
 ) -> Reranker:
     """
