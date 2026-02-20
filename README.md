@@ -204,7 +204,7 @@ docker-compose up -d --build
 ---
 ## 📹 演示
 ### 系统演示视频
-<video src="assets/演示视频.mp4" controls width="800" height="600">
+<video src="https://image-bucket-lfm-1402311803.cos.ap-guangzhou.myqcloud.com/%E6%BC%94%E7%A4%BA%E8%A7%86%E9%A2%91.mp4" controls width="800" height="600">
   您的浏览器不支持视频标签。
 </video>
 
@@ -217,10 +217,9 @@ docker-compose up -d --build
 - 外部工具调用的原始响应
 - 节点执行耗时分析
 
-<div align="center">
-  <img src="./assets/langsmith界面图.png" width="48%" />
-  <img src="./assets/langsmith节点监控图.png" width="48%" />
-</div>
+![langsmith界面图](./assets/langsmith界面图.png)
+
+![langsmith节点监控图](./assets/langsmith节点监控图.png)
 
 ---
 ⭐ **Animal Rescue Agent** 是我个人学习后的成果，欢迎大家批评指正。
