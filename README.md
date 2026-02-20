@@ -57,7 +57,7 @@ graph TB
     end
     
     subgraph "存储与外部服务"
-        DB[(SQLite / SQLAlchemy)]
+        DB[(SQL / SQLAlchemy)]
         COS[腾讯云 COS]
         APIs[Tavily Search / 高德地图 / 多模态 LLM]
     end
@@ -116,7 +116,7 @@ pip install -r requirements.txt
 | **存储 (COS)** | `COS_SECRET_ID` / `COS_SECRET_KEY` / `COS_BUCKET` / `COS_REGION` | 腾讯云 COS 配置，用于图片持久化 |
 | **外部 API** | `AMAP_API_KEY` / `TAVILY_API_KEY` | 高德地图与 Tavily 联网搜索 Key |
 | **认证** | `SECRET_KEY` / `ALGORITHM` | JWT 签发密钥与加密算法 |
-| **数据库** | `DATABASE_URL` | SQLAlchemy 业务库地址（如 sqlite:///./data/app.db） |
+| **数据库** | `DATABASE_URL` | SQLAlchemy 业务库地址 |
 | **监控** | `LANGCHAIN_TRACING_V2` / `LANGCHAIN_API_KEY` | LangSmith 开启开关 |
 
 ### 3. 运行服务
@@ -173,6 +173,33 @@ npm run dev
 - **`src/services/api.js`**: 统一的 Fetch 封装与 **SSE (Server-Sent Events)** 协议解析引擎。
 - **`src/App.vue`**: 应用骨架，负责全局状态管理、消息路由及图片上传回调。
 - **`vite.config.js`**: 现代前端构建配置，处理 API 代理与资源优化。
+
+---
+
+## 🐳 Docker 一键部署
+
+本项目支持使用 Docker Compose 快速构建并启动全栈环境（前端 + 后端 + 向量数据库）。
+
+### 1. 准备工作
+- 确保已安装 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/)。
+- 在项目根目录创建并配置 `.env` 文件（可参考 `.env.example`）。
+
+### 2. 启动服务
+在项目根目录下执行以下命令：
+```bash
+docker-compose up -d --build
+```
+
+### 3. 访问入口
+- **前端 Web 界面**: [http://localhost:5173/](http://localhost:5173/)
+- **后端 API 文档**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Qdrant 管理后台**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
+- **LangSmith监控后台**： [https://smith.langchain.com](https://smith.langchain.com)
+
+### 4. 常用命令
+- **查看运行状态**: `docker-compose ps`
+- **查看后端日志**: `docker-compose logs -f backend`
+- **停止并移除容器**: `docker-compose down`
 
 ---
 

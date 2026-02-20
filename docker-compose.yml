@@ -1,0 +1,47 @@
+services:
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: animal-rescue-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    networks:
+      - animal-rescue-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: animal-rescue-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - animal-rescue-network
+
+  # 向量数据库
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: animal-rescue-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+    networks:
+      - animal-rescue-network
+
+networks:
+  animal-rescue-network:
+    driver: bridge
+
