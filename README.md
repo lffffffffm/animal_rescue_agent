@@ -22,53 +22,113 @@
 本项目采用解耦的分层架构，核心逻辑由智能体工作流驱动，配合高可用基础设施实现专业领域的问答。
 
 ```mermaid
-graph TB
-    subgraph "前端层 (Vue 3 + Vite + Tailwind)"
-        UI[响应式聊天界面] --> SSE_Parser[SSE 流式解析引擎]
-        UI --> Image_Split[图片/文本拆分显示]
-        UI --> Cite_Jump[引用锚点点击跳转]
-        SSE_Parser --> Render[Markdown & 引用高亮渲染]
-    end
+graph TD
+    %% 用户层
+    User(("👤 用户"))
     
-    subgraph "API 网关层 (FastAPI)"
-        GW[RESTful API / SSE Endpoint] --> Auth[JWT 认证 & Session 校验]
-        GW --> Upload[图片处理 & 腾讯云 COS 持久化]
-        GW --> Trace_ID[Request Trace ID 注入]
-    end
-    
-    subgraph "Agent 决策大脑 (LangGraph)"
-        direction TB
-        Node1[Normalize: 输入标准化] --> Node2[Rewrite: 查询重写]
-        Node2 --> Node3[Vision Triage: 批处理视觉分诊]
-        Node3 --> Node4[Intent: 意图分类]
-        Node4 --> Node5[Gate: 动态路由/工具准入]
-        Node5 --> Node6[Collect: 多路证据聚合]
-        Node6 --> Node7[Judge: 信息充分性评估]
-        Node7 --> Node8[Respond: 结构化响应生成]
+    %% 前端层
+    subgraph Frontend [前端层 - Vue 3 + Vite + Tailwind]
+        UI[响应式聊天界面]
+        SSE[SSE流式解析引擎]
+        Split[图片/文本拆分]
+        Render[Markdown渲染]
+        Cite[引用锚点]
         
-        Monitoring[LangSmith: 节点级链路追踪] -. 监控 .-> Node1 & Node3 & Node6 & Node8
+        UI --> SSE
+        UI --> Split
+        SSE --> Render
+        Split --> Render
+        Render --> Cite
     end
     
-    subgraph "RAG 知识库引擎"
-        direction LR
-        Search[Qdrant Hybrid Search] --> Dense[Dense Vector]
-        Search --> Sparse[Sparse / BM25]
-        Dense & Sparse --> Rerank[Cross-Encoder 重排优化]
+    %% API网关层
+    subgraph Gateway [API网关层 - FastAPI]
+        API[RESTful/SSE端点]
+        Auth[JWT认证]
+        Upload[图片处理]
+        COS[(腾讯云COS)]
+        
+        API --> Auth
+        API --> Upload
+        Upload --> COS
     end
     
-    subgraph "存储与外部服务"
-        DB[(SQL / SQLAlchemy)]
-        COS[腾讯云 COS]
-        APIs[Tavily Search / 高德地图 / 多模态 LLM]
+    %% Agent决策层
+    subgraph Agent [Agent决策大脑 - LangGraph]
+        direction TB
+        N1[输入标准化]
+        N2[查询重写]
+        N3[视觉分诊]
+        N4[意图分类]
+        N5[动态路由]
+        N6[证据聚合]
+        N7[信息评估]
+        N8[响应生成]
+        
+        N1 --> N2 --> N3 --> N4 --> N5 --> N6 --> N7 --> N8
     end
-
-    %% 核心数据流
-    SSE_Parser <==> GW
-    GW <==> Agent
-    Node6 <==> Search
-    Node6 <==> APIs
-    Node3 <==> APIs
-    Node8 --> DB
+    
+    %% RAG知识库
+    subgraph RAG [RAG知识库引擎]
+        Search[Qdrant混合检索]
+        Dense[稠密向量]
+        Sparse[稀疏向量]
+        Rerank[重排优化]
+        
+        Search --> Dense
+        Search --> Sparse
+        Dense --> Rerank
+        Sparse --> Rerank
+    end
+    
+    %% 外部服务
+    subgraph External [存储与外部服务]
+        DB[(SQL数据库)]
+        APIS[Tavily/高德/多模态LLM]
+    end
+    
+    %% 监控
+    LangSmith[LangSmith链路追踪]
+    
+    %% 核心流程 - 使用不同线条
+    User ==>|1.发送消息| UI
+    UI ==>|2.HTTP请求| API
+    API ==>|3.转发| N1
+    
+    N6 -.->|4.检索| Search
+    N6 -.->|4.调用| APIS
+    N3 -.->|4.图片分析| APIS
+    
+    Search -.->|5.返回| N6
+    APIS -.->|5.返回| N6
+    
+    N8 ==>|6.响应| API
+    N8 -.->|持久化| DB
+    API ==>|7.SSE流式| UI
+    UI ==>|8.展示| User
+    
+    %% 监控链路
+    LangSmith -.-> N1
+    LangSmith -.-> N3
+    LangSmith -.-> N6
+    LangSmith -.-> N8
+    
+    %% 样式 - 最终修复：正确的Mermaid classDef语法
+    classDef user fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef frontend fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef gateway fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px;
+    classDef agent fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
+    classDef rag fill:#fff8e1,stroke:#ff6f00,stroke-width:2px;
+    classDef external fill:#ffebee,stroke:#b71c1c,stroke-width:2px;
+    classDef monitor fill:#e0e0e0,stroke:#424242,stroke-width:2px;
+    
+    class User user;
+    class UI,SSE,Split,Render,Cite frontend;
+    class API,Auth,Upload,COS gateway;
+    class N1,N2,N3,N4,N5,N6,N7,N8 agent;
+    class Search,Dense,Sparse,Rerank rag;
+    class DB,APIS external;
+    class LangSmith monitor;
 ```
 
 ---
