@@ -125,7 +125,7 @@ class QdrantHybridStore:
             species: list | str = None,
             min_urgency: str = None,
     ):
-        URGENCY_LEVELS = {
+        URGENCY = {
             "info": 1,
             "common": 2,
             "critical": 3,
@@ -147,10 +147,10 @@ class QdrantHybridStore:
             )
 
         if min_urgency:
-            min_level = URGENCY_LEVELS.get(min_urgency, 1)
+            min_level = URGENCY.get(min_urgency, 1)
 
             allowed_urgencies = [
-                key for key, level in URGENCY_LEVELS.items()
+                key for key, level in URGENCY.items()
                 if level >= min_level
             ]
 

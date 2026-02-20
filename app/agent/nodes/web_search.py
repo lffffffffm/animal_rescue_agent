@@ -13,7 +13,7 @@ def web_search_node(state: AgentState) -> AgentState:
 
     result = web_search_mcp.invoke(
         query=query,
-        max_results=5,
+        max_results=settings.WEB_SEARCH_MAX_RESULTS,
     )
 
     return {

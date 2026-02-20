@@ -94,7 +94,6 @@ def rescue_query(
             "used_web_search": result.get("used_web_search", False),
             "used_map": result.get("used_map", False),
             "evidences": result.get("merged_docs", []),
-            "images": images_meta,
         }
     )
 

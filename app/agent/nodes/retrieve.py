@@ -25,10 +25,9 @@ def retrieve_documents(state: AgentState) -> AgentState:
         top_k = settings.RETRIEVAL_TOP_K + 5 * retry_count
 
     retriever = get_retriever(top_k=top_k)
-    docs = retriever.retrieve(query)
+    docs = retriever.retrieve(query, species=state.get("vision_facts", {}).get("species"), urgency=state.get("urgency"))
 
     return {
-        **state,
         "kb_docs": docs,
         "retry_count": retry_count + 1
     }

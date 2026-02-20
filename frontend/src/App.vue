@@ -116,26 +116,34 @@ async function loadHistory(thread) {
     const hist = await getSessionHistory(sid).catch(() => [])
     for (const h of hist || []) {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-      // 历史图片 URL：若后端已返回绝对 URL 则直接使用；若是相对路径则补齐 API_BASE_URL
+      // 历史图片 URL
       const images = (h.user_images || []).map((u) => (/^https?:\/\//i.test(u) ? u : `${API_BASE_URL}${u}`))
 
-      all.push({
-        id: `${sid}:${h.id}:u`,
-        role: 'user',
-        content: h.user_input || '',
-        images: images
-      })
-      let assistantImages = [];
-      if (h.agent_meta && h.agent_meta.images && Array.isArray(h.agent_meta.images)) {
-          assistantImages = h.agent_meta.images.map(img => {
-              const url = img.url || img; // 兼容 {url: '...'} 和 '...' 两种格式
-              return /^https?:\/\//i.test(url) ? url : `${API_BASE_URL}${url}`;
-          });
+      // 拆分历史用户消息：图片在上
+      if (images.length) {
+        all.push({
+          id: `${sid}:${h.id}:u:img`,
+          role: 'user',
+          content: '',
+          images: images
+        })
       }
+      // 文字在下
+      if (h.user_input) {
+        all.push({
+          id: `${sid}:${h.id}:u:text`,
+          role: 'user',
+          content: h.user_input || ''
+        })
+      }
+
+      // 注意：不要从 agent_meta 回显用户上传图片到 assistant 消息里，避免历史记录重复显示
       all.push({
         id: `${sid}:${h.id}:a`,
         role: 'assistant',
-        content: h.agent_response || ''
+        content: h.agent_response || '',
+        meta: h.agent_meta || {},
+        images: []
       })
     }
   }
@@ -166,7 +174,7 @@ function onEditInput({ id, title }) {
 async function onCommitTitle({ id, title }) {
   const t = threads.value.find(i => i.id === id)
   if (!t) {
-  editingId.value = null
+    editingId.value = null
     return
   }
 
@@ -175,12 +183,11 @@ async function onCommitTitle({ id, title }) {
 
   const prev = String(t.title ?? '')
 
-  // 先退出编辑态（避免 blur 反复触发）
+  // 先退出编辑态
   editingId.value = null
 
   const lastSid = t.sessionIds[t.sessionIds.length - 1]
   if (!lastSid || typeof lastSid !== 'string') {
-    // 还没落库的会话（本地新会话），只能更新前端显示
     t.title = next
     t.draftTitle = undefined
     return
@@ -191,7 +198,6 @@ async function onCommitTitle({ id, title }) {
     t.title = next
     t.draftTitle = undefined
   } catch (e) {
-    // 回滚
     t.title = prev
     t.draftTitle = prev
     error.value = e?.message || '更新标题失败'
@@ -222,12 +228,12 @@ function onClearGroup(key) {
 
 const enableWeb = ref(false)
 const enableMap = ref(false)
-const location = ref('') // 用于存储经纬度
+const location = ref('')
 
 watch(enableMap, (newVal) => {
   if (newVal) {
     if (!navigator.geolocation) {
-      showToast('您的浏览器不支持地理位置。', 'error')
+      alert('您的浏览器不支持地理位置。')
       enableMap.value = false
       return
     }
@@ -239,8 +245,6 @@ watch(enableMap, (newVal) => {
           location.value = `${latitude},${longitude}`
         },
         (err) => {
-          // https://developer.mozilla.org/en-US/docs/Web/API/GeolocationPositionError/code
-          // 1: PERMISSION_DENIED, 2: POSITION_UNAVAILABLE, 3: TIMEOUT
           let msg = '获取不到当前地理位置信息。'
           if (err?.code === 1) msg = '已拒绝访问地理位置权限，获取不到当前地理位置信息。'
           else if (err?.code === 2) msg = '当前位置不可用，获取不到当前地理位置信息。'
@@ -253,7 +257,7 @@ watch(enableMap, (newVal) => {
         { timeout: 10000 }
       )
     } catch (e) {
-      showToast('获取不到当前地理位置信息。', 'error')
+      alert('获取不到当前地理位置信息。')
       enableMap.value = false
     }
   } else {
@@ -262,9 +266,6 @@ watch(enableMap, (newVal) => {
 })
 
 async function send(payload) {
-  // 调试：打印接收到的数据
-  console.log('App.vue received send event with payload:', payload);
-
   const t = ensureThread()
   error.value = ''
 
@@ -272,23 +273,29 @@ async function send(payload) {
   const files = typeof payload === 'string' ? [] : (payload?.files || [])
   const previews = typeof payload === 'string' ? [] : (payload?.previews || [])
 
-  const userMsgId = `u:${Date.now()}`
-  const userMsg = { id: userMsgId, role: 'user', content: text, images: previews }
-  t.messages.push(userMsg)
+  const baseTs = Date.now()
+  const userImgMsgId = `u:${baseTs}:img`
+  const userTextMsgId = `u:${baseTs}:text`
 
+  // 1. 先 push 图片（独立块）
+  if (previews.length) {
+    t.messages.push({ id: userImgMsgId, role: 'user', content: '', images: previews })
+  }
+
+  // 2. 再 push 文字（气泡）
+  if (text) {
+    t.messages.push({ id: userTextMsgId, role: 'user', content: text })
+  }
+
+  // 历史只传文本
   let chat_history = t.messages
-    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
     .slice(-10)
     .map(({ role, content }) => ({ role, content }))
 
-  if (!Array.isArray(chat_history)) {
-    console.error('chat_history 不是数组:', chat_history)
-    chat_history = []
-  }
-
   loading.value = true
 
-  const assistantId = `a:${Date.now()}`
+  const assistantId = `a:${baseTs}`
   const assistantMsg = { id: assistantId, role: 'assistant', content: '' }
   t.messages.push(assistantMsg)
 
@@ -296,12 +303,10 @@ async function send(payload) {
     const lastSid = t.sessionIds[t.sessionIds.length - 1]
     let session_id = typeof lastSid === 'string' ? lastSid : null
 
-    // 先上传图片（最多4张）
     const image_ids = []
     if (Array.isArray(files) && files.length) {
       const limited = files.slice(0, 4)
       for (const f of limited) {
-        // eslint-disable-next-line no-await-in-loop
         const up = await uploadImage(f, session_id)
         if (up?.session_id && !t.sessionIds.includes(up.session_id)) {
           t.sessionIds.push(up.session_id)
@@ -347,8 +352,6 @@ async function send(payload) {
 
         if (meta?.session_id && !t.sessionIds.includes(meta.session_id)) {
           t.sessionIds.push(meta.session_id)
-
-          // 新会话：把 thread.id 切换为后端 session_id，避免后续用 Date.now() 这种本地 id 造成“会话未找到”
           if (!session_id) {
             const oldId = t.id
             t.id = meta.session_id
@@ -356,17 +359,32 @@ async function send(payload) {
           }
         }
 
-        // 若后端返回 images 元数据，追加到 assistant 消息以便前端展示
-        if (Array.isArray(meta?.images) && meta.images.length) {
-          assistantMsg.images = meta.images.map(i => i.url || i)
+        // 注意：用户上传的图片已经在 user 的图片消息中展示；这里不要再把同一批图片挂到 assistant 消息上
+        // 否则会出现“用户发一张图，assistant 回复里也带一张同样的图”的重复展示
+        // 如果未来确实需要展示 assistant 生成的图片/分析图，请使用单独字段或在后端区分。
+        // if (Array.isArray(meta?.images) && meta.images.length) {
+        //   assistantMsg.images = meta.images.map(i => i.url || i)
+        // }
+
+
+        const idx = t.messages.findIndex(m => m.id === assistantId)
+        if (idx >= 0) {
+          const prev = t.messages[idx]
+          t.messages[idx] = {
+            ...prev,
+            meta: {
+              ...(prev.meta || {}),
+              ...meta,
+              evidences: Array.isArray(meta?.evidences) ? meta.evidences : (prev?.meta?.evidences || [])
+            }
+          }
         }
 
-        if (t.title === 'New chat') t.title = text
+        if (t.title === 'New chat') t.title = text || 'New chat'
       }
     })
   } catch (e) {
-    // 失败：回滚本次 user/assistant 消息，避免看起来“已经发出去了”
-    t.messages = t.messages.filter(m => m.id !== assistantId && m.id !== userMsgId)
+    t.messages = t.messages.filter(m => m.id !== assistantId && m.id !== userImgMsgId && m.id !== userTextMsgId)
     error.value = e?.message || '发送失败'
   } finally {
     loading.value = false

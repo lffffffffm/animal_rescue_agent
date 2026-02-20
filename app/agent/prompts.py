@@ -1,12 +1,3 @@
-DEFAULT_QUERY_WITH_IMAGE = """
-请分析这张图片中的动物情况，包括：
-1. 动物种类（如猫、狗等）
-2. 可见的伤情或异常情况
-3. 紧急程度评估
-4. 建议的急救措施（如需要）
-
-请用简洁清晰的语言描述，并标记出任何需要立即关注的问题。
-"""
 DEFAULT_QUERY_NO_INPUT = """
 用户未提供任何描述。请先提出 3-5 个澄清问题以便进行动物救助咨询，优先获取：
 1) 动物种类/体型（猫/狗/幼崽/成体）
@@ -18,21 +9,63 @@ DEFAULT_QUERY_NO_INPUT = """
 输出为简短问题清单。
 """
 
+DEFAULT_QUERY_WITH_IMAGE = """
+请分析这张图片中的动物情况，包括：
+1. 动物种类（如猫、狗等）
+2. 动物的品种（如金渐层、哈士奇等）
+3. 可见的伤情或异常情况
+4. 紧急程度评估
+5. 建议的急救措施（如需要）
+6. 或者其他需要的建议
+
+请用简洁清晰的语言描述，并标记出任何需要立即关注的问题。
+"""
+
 VISION_TRIAGE_PROMPT_TEMPLATE = (
     "你是流浪动物救助助手的视觉分诊模块。"
-    "请根据图片判断动物是否受伤、伤口/症状位置、严重程度、是否存在危及生命的红旗信号。"
+    "请根据图片判断动物种类、是否受伤、伤口/症状位置、严重程度、是否存在危及生命的红旗信号。"
+    "如果无法判断动物种类，请输出 uncertain。"
     "请只输出严格 JSON，不要输出多余文字。\n"
     "JSON schema:\n"
     "{{\n"
-    '  "animal_type": "cat|dog|rabbit|other|unknown",\n'
-    '  "summary": "一句话概括",\n'
-    '  "injuries": [{{"part":"...","type":"...","severity":"low|medium|high","notes":"..."}}],\n'
-    '  "urgency_level": "LOW|MEDIUM|HIGH|CRITICAL",\n'
-    '  "red_flags": ["heavy_bleeding","open_fracture","respiratory_distress","seizure_or_unconscious"],\n'
+    '  "species": "dpotbellied-pigs|rats|reptiles|hamsters|amphibians|chinchillas|ferrets|snake|cat|guinea-pigs|gerbils|fish|sugar-gliders|rabbits|dog|mice|uncertain",\n'
+    '  "breed": "可能的品种名称，如 金毛、哈士奇，没有则 null",\n'
+    '  "breed_confidence": 0.0,\n'
+    '  "summary": "一句话概括, 没有图片则为null",\n'
+    '  "injuries": [{{"part":"...","type":"...","severity":"low|medium|high","notes":"..."}}],没有图片则为null\n'
+    '  "urgency": "critical|info|common",\n'
+    '  "red_flags": ["heavy_bleeding","open_fracture","respiratory_distress","seizure_or_unconscious","etc"],\n'
     '  "confidence": 0.0\n'
     "}}\n"
+    "注意：species 必须是一个列表，即便只有一个物种也请放在列表中。若包含多个物种，请全部列出。同理，breed 也必须是一个列表。\n"
     "用户问题（可选参考）：{query}\n"
 )
+VISION_TRIAGE_PROMPT_TEMPLATE_WITHOUT_IMAGE = """
+你是流浪动物救助助手的“语义分诊模块”。
+由于用户当前未提供图片，请仅根据用户的文字描述（Query）进行语义分析，并提取关键信息。
+
+请严格遵守以下逻辑：
+1. 物种判断：从 Query 中推断涉及的所有动物种类。若完全未提及或含糊不清，必须输出 ["uncertain"]。
+2. 紧急程度：根据描述的严重性，严格映射为：critical（重伤/命危）、common（普通伤病）、info（健康/咨询/轻微）。
+3. 危险信号：若描述中包含大出血、呼吸困难、抽搐、昏迷等，请在 red_flags 中记录。
+
+请只输出严格 JSON，不要输出多余文字。
+
+JSON schema:
+{{
+  "species": "dpotbellied-pigs|rats|reptiles|hamsters|amphibians|chinchillas|ferrets|snake|cat|guinea-pigs|gerbils|fish|sugar-gliders|rabbits|dog|mice|uncertain",
+  "breed": "可能的品种名称，若无则 null",
+  "breed_confidence": 0.0,
+  "summary": "基于文字描述的一句话现状概括",
+  "injuries": [{{"part":"...","type":"...","severity":"low|medium|high","notes":"..."}}],没有图片则为null\n
+  "urgency": "critical|info|common",
+  "red_flags": ["heavy_bleeding", "open_fracture", "respiratory_distress", "seizure_or_unconscious"],
+  "confidence": 0.0,
+}}
+注意：species 必须是一个列表，即便只有一个物种也请放在列表中。若包含多个物种，请全部列出。同理，breed 也必须是一个列表。\n
+用户描述：{query}
+"""
+
 
 REWRITE_QUERY_PROMPT = """
 你是一个专业的搜索查询重写助手，负责将用户的原始问题重写为
@@ -82,7 +115,6 @@ FINAL_RESPONSE_PROMPT_TEMPLATE = """你是一个专业、可靠的动物救助�
 
 ### 你的回答：
 """
-
 
 RESCUE_ACTION_JUDGE_PROMPT = """
 你是一个【救助行动触发判断模块】，而不是对话助手。

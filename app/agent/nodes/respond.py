@@ -8,16 +8,8 @@ from loguru import logger
 
 from app.agent.state import AgentState
 from app.agent.prompts import FINAL_RESPONSE_PROMPT_TEMPLATE
-from string import Template
 from app.llm import get_llm
-
-
-def _clean_text(v: Any) -> str:
-    if v is None:
-        return ""
-    if not isinstance(v, str):
-        v = str(v)
-    return v.strip()
+from app.utils.common import clean_text
 
 
 def _build_context(state: AgentState) -> str:
@@ -27,7 +19,7 @@ def _build_context(state: AgentState) -> str:
     # 1. 视觉证据
     vf = state.get("vision_facts")
     if vf and isinstance(vf, dict):
-        summary = _clean_text(vf.get("summary"))
+        summary = clean_text(vf.get("summary"))
         if summary:
             context_parts.append(f"### 图片观察\n- {summary}")
 
@@ -60,9 +52,9 @@ def _build_context(state: AgentState) -> str:
         map_texts = []
         for i, place in enumerate(map_result):
             if isinstance(place, dict):
-                name = _clean_text(place.get("name"))
-                address = _clean_text(place.get("address"))
-                tel = _clean_text(place.get("tel"))
+                name = clean_text(place.get("name"))
+                address = clean_text(place.get("address"))
+                tel = clean_text(place.get("tel"))
                 if name:
                     map_texts.append(f"- {name} (地址: {address or '未知'}, 电话: {tel or '无'})")
         if map_texts:
@@ -89,6 +81,9 @@ def _generate_instruction(state: AgentState) -> str:
         "5. 表达要自然、像在对话：避免固定套话开头与重复声明；安全提醒只在与问题相关或存在风险时给出。",
         "6. 结构贴合问题：能用短段落讲清就不要硬套固定框架；需要步骤时再用清单。",
         "7. 若参考资料不足：明确说明不确定之处，并提出 1~3 个关键追问以补齐信息。",
+        "8. **引用标注要求**：当你在某个句子/要点中使用了【参考资料】中的信息，请在该句末尾用方括号标注引用编号，例如 [1] 或 [2][4]。引用编号必须对应【参考资料】中方括号编号的条目。",
+        "9. **引用覆盖要求**：关键医学/处置建议、结论性判断、数据性描述尽量给出引用；纯安抚性话语可不标注。",
+        "10. 输出一定要重点清晰， 层次分明， 不要输出密集无重点， 要让人有阅读下去的欲望"
     ]
 
     if mode == "emergency":
@@ -137,7 +132,7 @@ async def respond(state: AgentState) -> AgentState:
     4. 失败时回退到安全模板
     """
     writer_fn: Optional[Callable[[str], None]] = state.get("writer")
-    query = _clean_text(state.get("rewrite_query") or state.get("normalized_query") or state.get("query"))
+    query = clean_text(state.get("rewrite_query") or state.get("normalized_query") or state.get("query"))
     mode = (state.get("gate") or {}).get("mode", "normal")
 
     # 1. 打包证据
@@ -149,7 +144,6 @@ async def respond(state: AgentState) -> AgentState:
     answer_parts = []  
     # 3. 调用 LLM
     try:
-        # 使用 Template.safe_substitute 避免花括号冲突
         prompt = FINAL_RESPONSE_PROMPT_TEMPLATE.format(
             context=context,
             query=query,
@@ -167,14 +161,11 @@ async def respond(state: AgentState) -> AgentState:
         if not response:
             raise ValueError("LLM returned empty response.")
 
-        if not response:
-            raise ValueError("LLM returned empty response.")
-
         logger.info(f"respond_node (LLM): mode={mode} response_len={len(response)}")
 
     except Exception as e:
         logger.exception(f"respond_node (LLM) failed: {e}. Falling back to template.")
-        # 4. 失败兜底：回退到安全的模板回复
+        # 4. 失败兜底
         if mode == "emergency":
             response = "【紧急情况】检测到高风险信号，请立即行动！\n1. 确保自身安全。\n2. 对动物进行必要的初步处理（如止血、保暖）。\n3. 尽快联系或送往专业兽医机构。"
         else:

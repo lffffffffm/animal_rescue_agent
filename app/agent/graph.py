@@ -8,35 +8,51 @@ from app.agent.nodes.gate import gate
 from app.agent.nodes.collect_evidence import collect_evidence
 from app.agent.nodes.sufficiency_judge import sufficiency_judge
 from app.agent.nodes.respond import respond
+from langsmith import traceable
+import inspect
+
+# 定义白名单字段，用于上报到 LangSmith
+TRACE_WHITELIST = {
+    "query", "normalized_query", "rewrite_query", "user_intent",
+    "urgency", "red_flags", "gate", "sufficiency",
+    "retry_count", "force_top_k",
+}
+
+
+def trace_node(name: str):
+    """节点监控包装器：使用 LangSmith 的 @traceable 装饰器。"""
+
+    def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @traceable(name=name, run_type="chain")
+            async def async_wrapper(state: AgentState):
+                return await func(state)
+
+            return async_wrapper
+
+        @traceable(name=name, run_type="chain")
+        def sync_wrapper(state: AgentState):
+            return func(state)
+
+        return sync_wrapper
+
+    return decorator
 
 
 def build_graph():
-    """
-    LangGraph
-
-    流程：
-      normalize_input -> rewrite_query -> vision_triage -> intent_classifier -> gate
-        -> collect_evidence -> sufficiency_judge -> respond -> END
-
-    说明：
-    - gate_node：单点决策，产出 gate={mode/tools/reasons}
-    - collect_evidence_node：按 gate.tools 执行 KB/Web/Map，并在 KB 不足时扩大召回（重试）
-    - sufficiency_judge_node：
-        * emergency：不阻塞回答，只输出免责声明强度 + 关键追问
-        * hybrid/normal：判断信息充足度 ENOUGH/PARTIAL/INSUFFICIENT
-    - respond_node：根据 gate.mode + sufficiency 生成最终 response（模板策略）
-    """
+    """LangGraph 工作流定义。"""
 
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("normalize_input_node", normalize_input)
-    workflow.add_node("rewrite_query_node", rewrite_query)
-    workflow.add_node("vision_triage_node", vision_triage)
-    workflow.add_node("intent_classifier_node", intent_classifier)
-    workflow.add_node("gate_node", gate)
-    workflow.add_node("collect_evidence_node", collect_evidence)
-    workflow.add_node("sufficiency_judge_node", sufficiency_judge)
-    workflow.add_node("respond_node", respond)
+    # 应用包装器进行节点注册
+    workflow.add_node("normalize_input_node", trace_node("normalize_input")(normalize_input))
+    workflow.add_node("rewrite_query_node", trace_node("rewrite_query")(rewrite_query))
+    workflow.add_node("vision_triage_node", trace_node("vision_triage")(vision_triage))
+    workflow.add_node("intent_classifier_node", trace_node("intent_classifier")(intent_classifier))
+    workflow.add_node("gate_node", trace_node("gate")(gate))
+    workflow.add_node("collect_evidence_node", trace_node("collect_evidence")(collect_evidence))
+    workflow.add_node("sufficiency_judge_node", trace_node("sufficiency_judge")(sufficiency_judge))
+    workflow.add_node("respond_node", trace_node("respond")(respond))
 
     workflow.set_entry_point("normalize_input_node")
 
@@ -54,25 +70,12 @@ def build_graph():
 
 app = build_graph()
 
-
 if __name__ == "__main__":
-    initial_state: AgentState = {
-        "query": "这只猫严重吗？需要马上去医院吗？",
-        "chat_history": [],
-        "image_ids": ["https://gips1.baidu.com/it/u=297928608,3541284941&fm=3074&app=3074&f=JPEG?w=1080&h=1410&type=normal&func="],
-        "enable_web_search": True,
-        "enable_map": True,
-        "location": "北京",
-        "radius_km": 5,
-        "decision_trace": [],
-    }
+    graph = build_graph()
 
-    result = app.invoke(initial_state)
+    # 输出 Mermaid 文本
+    print(graph.get_graph().draw_mermaid())
 
-    print("最终 state keys:", list(result.keys()))
-    print("mode:", (result.get("gate") or {}).get("mode"))
-    print("user_intent:", result.get("user_intent"))
-    print("urgency_level:", result.get("urgency_level"))
-    print("red_flags:", result.get("red_flags"))
-    print("response:\n", result.get("response"))
-    print("decision_trace:", result.get("decision_trace"))
+    # 或者直接生成 PNG
+    with open("./agent_graph.png", "wb") as f:
+        f.write(graph.get_graph().draw_mermaid_png())

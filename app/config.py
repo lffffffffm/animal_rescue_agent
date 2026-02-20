@@ -45,15 +45,15 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # 检索配置
-    RETRIEVAL_TOP_K: int = 5
+    RETRIEVAL_TOP_K: int = 15
     SIMILARITY_THRESHOLD: float = 0.6
 
-    # Judge相关配置
     MAX_RETRY: int = 2  # 最大重试次数
-    MIN_EVIDENCE_CONFIDENCE: float = 0.6
     MIN_DOCS_REQUIRED: int = 5  # 至少需要的文档数量
-    MIN_HIGH_CONF_DOCS: int = 6  # 满足高可信度文档数量
-    MIN_RERANK_SCORE: float = 0.6  # rerank 相关性阈值（经验值）
+
+    # rerank相关配置
+    RERANK_TOP_K: int = 5
+    MIN_RERANK_SCORE: float = 0.55
 
     # 认证配置
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     COS_SECRET_KEY: str = os.getenv("COS_SECRET_KEY", "")
     COS_REGION: str = os.getenv("COS_REGION", "")
     COS_BUCKET: str = os.getenv("COS_BUCKET", "")
+    # WebSearch 配置
+    WEB_SEARCH_MAX_RESULTS: int = 8
 
     class Config:
         env_file = ".env"

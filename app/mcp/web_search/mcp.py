@@ -60,7 +60,7 @@ def main():
 
     if not api_key:
         print("❌ 未找到 TAVILY_API_KEY 环境变量，请先设置 API 密钥")
-        print("💡 设置方法: export TAVILY_API_KEY='your_api_key'")
+        print("💡 设置方法: TAVILY_API_KEY='your_api_key'")
         return
 
     # 创建 MCP 实例

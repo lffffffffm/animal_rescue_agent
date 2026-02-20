@@ -6,20 +6,13 @@ from loguru import logger
 
 from app.agent.state import AgentState
 from app.config import settings
-
-
-def _clean_text(v: Any) -> str:
-    if v is None:
-        return ""
-    if not isinstance(v, str):
-        v = str(v)
-    return v.strip()
+from app.utils.common import clean_text
 
 
 def _mode_from_gate(state: AgentState) -> str:
     g = state.get("gate") or {}
     if isinstance(g, dict):
-        m = _clean_text(g.get("mode"))
+        m = clean_text(g.get("mode"))
         if m in {"emergency", "hybrid", "normal"}:
             return m
     return "normal"
@@ -44,7 +37,7 @@ def sufficiency_judge(state: AgentState) -> AgentState:
 
     mode = _mode_from_gate(state)
 
-    query = _clean_text(state.get("rewrite_query") or state.get("normalized_query") or state.get("query"))
+    query = clean_text(state.get("rewrite_query") or state.get("normalized_query") or state.get("query"))
 
     kb_docs = state.get("kb_docs") or []
     if not isinstance(kb_docs, list):
@@ -68,7 +61,7 @@ def sufficiency_judge(state: AgentState) -> AgentState:
     if not isinstance(red_flags, list):
         red_flags = []
 
-    location = _clean_text(state.get("location"))
+    location = clean_text(state.get("location"))
 
     missing: list[str] = []
     followup: list[str] = []
@@ -83,10 +76,7 @@ def sufficiency_judge(state: AgentState) -> AgentState:
     if not location:
         missing.append("location")
 
-    # 关键追问（工程取舍：采用“可执行的最小问诊集”，避免过度诊断）
-    # 原则：
-    # - 紧急：优先获取是否存在危及生命红旗信号 + 可操作的处置条件
-    # - 非紧急：优先补全症状与时间线，便于判断是否需要进一步检索/就医
+    # 关键追问
     followup.extend([
         "当前最担心的症状是什么（出血/跛行/呼吸异常/抽搐/呕吐腹泻/精神差）？",
         "症状大概从什么时候开始、是突然发生还是逐渐加重？",
@@ -119,7 +109,7 @@ def sufficiency_judge(state: AgentState) -> AgentState:
     else:
         # ===== hybrid/normal：做“够不够回答”判断 =====
         kb_ok = len(kb_docs) >= settings.MIN_DOCS_REQUIRED
-        vision_ok = (vision_conf is None) or (vision_conf >= 0.6)  # None 表示模型没给，暂时不扣分
+        vision_ok = (vision_conf is None) or (vision_conf >= 0.6)
         web_ok = len(web_facts) > 0
 
         if kb_ok:
@@ -155,4 +145,3 @@ def sufficiency_judge(state: AgentState) -> AgentState:
         "sufficiency": suff,
         "decision_trace": decision_trace,
     }
-

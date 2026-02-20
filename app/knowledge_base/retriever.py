@@ -18,18 +18,27 @@ class HybridRetriever:
     ):
         self.collection_name = collection_name
         self.top_k = top_k
-        self.reranker = get_reranker(top_n=top_k)
+        self.reranker = get_reranker()
         self.vector_store = get_vector_store(collection_name)
 
-    def retrieve(self, query: str, species: str = None) -> List[Document]:
+    def retrieve(
+            self,
+            query: str,
+            species: str = None,
+            urgency: str = None
+    ) -> List[Document]:
         logger.info(f"Hybrid 检索查询: {query}")
 
+        min_urgency = urgency if urgency else None
+
         base_retriever = self.vector_store.get_retriever(
-            k=15,
-            species=species
+            k=self.top_k,
+            species=species,
+            min_urgency=min_urgency
         )
-        # 获取粗排结果
+
         initial_docs = base_retriever.invoke(query)
+
         if not initial_docs:
             return []
 

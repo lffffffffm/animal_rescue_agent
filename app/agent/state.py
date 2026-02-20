@@ -19,7 +19,7 @@ class AgentState(TypedDict, total=False):
 
     # ===== vision =====
     vision_facts: Optional[dict]
-    urgency_level: Optional[str]            # LOW/MEDIUM/HIGH/CRITICAL
+    urgency: Optional[str]                  # info/common/critical
     red_flags: Optional[list[str]]          # e.g. heavy_bleeding/respiratory_distress
 
     # ===== intent/gate =====
@@ -29,7 +29,7 @@ class AgentState(TypedDict, total=False):
     # ===== evidence collection =====
     force_top_k: Optional[int]              # 用于控制 retrieve 的 top_k
     retry_count: int                        # KB 重试/扩大召回轮数（你现在会写回）
-    kb_docs: List[Document]
+    kb_docs: List[dict]
     web_facts: List[dict]
     map_result: Optional[object]            # 兼容 list[dict] 或 dict（看 MapMCP 返回）
 

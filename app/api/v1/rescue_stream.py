@@ -100,16 +100,69 @@ async def rescue_query_stream(
                     "location": req.location,
                     "radius_km": req.radius_km,
                     "image_ids": [img["url"] for img in images_meta] if images_meta else [],
-                    "images": images_meta,
+                    # 注意：不要把用户上传的图片回显到 assistant meta，避免前端重复展示
+                    # "images": images_meta,
                     "writer": writer,
                 })
                 answer = result.get("response", "") or ""
+
+                # 提取并转换证据 (kb_docs + web_facts 合并)
+                evidences = []
+
+                # 1) 知识库文档 (kb_docs: List[Document])
+                kb_docs = result.get("kb_docs") or []
+                for doc in kb_docs:
+                    if hasattr(doc, "page_content"):
+                        evidences.append({
+                            "page_content": doc.page_content,
+                            "metadata": doc.metadata if hasattr(doc, "metadata") else {},
+                        })
+
+                # 2) WebSearch 证据（无论 KB 是否命中都追加）
+                web_facts = result.get("web_facts") or []
+                for fact in web_facts:
+                    if not isinstance(fact, dict):
+                        continue
+
+                    url = fact.get("url") or fact.get("link") or ""
+                    title = fact.get("title") or fact.get("name") or "网页搜索结果"
+                    content = fact.get("snippet") or fact.get("content") or fact.get("text") or ""
+
+                    if not (url or content):
+                        continue
+
+                    evidences.append({
+                        "page_content": content,
+                        "metadata": {
+                            "title": title,
+                            "source_info": {
+                                "url": url,
+                                "platform": fact.get("source") or fact.get("platform") or "Web Search",
+                                "author": fact.get("author"),
+                                "version": fact.get("version"),
+                            },
+                            **{k: v for k, v in fact.items() if k not in {"content", "snippet", "text"}},
+                        },
+                    })
+
+                # 获取 collect_evidence_node 的调试信息
+                collect_trace = next((t for t in result.get("decision_trace", []) if t.get("node") == "collect_evidence_node"), {})
+
                 final_meta = {
-                    "used_web_search": result.get("used_web_search", False),
-                    "used_map": result.get("used_map", False),
-                    "evidences": result.get("merged_docs", []),
+                    "used_web_search": result.get("used_web_search", False) or collect_trace.get("use_web", False),
+                    "used_map": result.get("used_map", False) or collect_trace.get("use_map", False),
+                    "evidences": evidences,  # 使用转换后的 evidences
                     "rescue_resources": result.get("rescue_resources", []) if result.get("map_result") else None,
-                    "images": images_meta,
+                    # 注意：不要把用户上传的图片回显到 assistant meta，避免前端重复展示
+                # "images": images_meta,
+                    # ===== 调试信息 (方便定位 web_search 不显示问题) =====
+                    "debug": {
+                        "use_web": collect_trace.get("use_web"),
+                        "web_facts_len": len(result.get("web_facts") or []),
+                        "web_error": collect_trace.get("web_error"),
+                        "kb_docs_len": len(result.get("kb_docs") or []),
+                        "enable_web_search": req.enable_web_search,
+                    }
                 }
 
             # 启动后台任务
