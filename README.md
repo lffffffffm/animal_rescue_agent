@@ -88,7 +88,7 @@ graph TB
 - **鲁棒性设计**：整合了 `common.py` 工具库，采用更稳健的正则表达式提取 LLM 输出的 JSON，并对关键 API 调用做了详尽的异常捕获与兜底逻辑。
 
 ### 4. 极致交互与引用
-- **分类引用体系**：后端通过 `[KBn]` 和 `[Wn]` 区分证据来源，前端通过正则动态将其转换为带有动画的高亮锚点，实现了“结论必有据”的产品闭环。
+- **引用体系**：后端通过 `[n]` 引用证据来源，前端通过正则动态将其转换为带有动画的高亮锚点，实现了“结论必有据”的闭环。
 - **SSE 全链路流式**：从 LLM 生成到 API 传输再到前端渲染，全链路保持流式状态，消除用户等待焦虑。
 
 ---
@@ -202,6 +202,13 @@ docker-compose up -d --build
 - **停止并移除容器**: `docker-compose down`
 
 ---
+## 📹 演示
+### 系统演示视频
+<video src="assets/演示视频.mp4" controls width="800" height="600">
+  您的浏览器不支持视频标签。
+</video>
+
+---
 
 ## 📊 可观测性与调试
 本项目深度集成 **LangSmith**。开发者可以确切观测到每个 Agent 节点的：
@@ -210,5 +217,10 @@ docker-compose up -d --build
 - 外部工具调用的原始响应
 - 节点执行耗时分析
 
+<div align="center">
+  <img src="./assets/langsmith界面图.png" width="48%" />
+  <img src="./assets/langsmith节点监控图.png" width="48%" />
+</div>
+
 ---
-⭐ **Animal Rescue Agent** 致力于用技术力量填补动物救助中的信息差。欢迎提交 Issue 或贡献代码！
+⭐ **Animal Rescue Agent** 是我个人学习后的成果，欢迎大家批评指正。
